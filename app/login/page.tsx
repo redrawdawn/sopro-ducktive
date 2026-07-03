@@ -1,8 +1,17 @@
 import { AuthForm } from "@/components/auth/auth-form";
+import { createClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
-export default function LoginPage() {
+export default async function LoginPage() {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getUser();
+
+  if (data.user) {
+    redirect("/dashboard");
+  }
+
   return (
-    <main className="flex min-h-screen items-center justify-center px-4 py-10">
+    <main className="app-shell flex items-center justify-center">
       <AuthForm mode="login" />
     </main>
   );

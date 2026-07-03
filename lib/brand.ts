@@ -1,6 +1,6 @@
 export const brand = {
-  appName: "Sopro Ducktive",
-  casualName: "Ducktive",
-  mascotName: "Sopro",
-  tagline: "So productive, it levels up your life."
+  appName: "Motive",
+  casualName: "Mo",
+  mascotName: "Mo",
+  tagline: "Build momentum, one task at a time."
 };

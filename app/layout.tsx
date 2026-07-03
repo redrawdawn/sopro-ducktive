@@ -2,20 +2,20 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Sopro Ducktive",
-  description: "A gamified productivity app for households, habits, and real-life quests.",
-  applicationName: "Sopro Ducktive",
+  title: "Motive",
+  description: "Quests, XP, and shared progress.",
+  applicationName: "Motive",
   appleWebApp: {
     capable: true,
-    title: "Ducktive",
-    statusBarStyle: "default"
+    title: "Motive",
+    statusBarStyle: "black-translucent"
   }
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#159160"
+  themeColor: "#090b16"
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

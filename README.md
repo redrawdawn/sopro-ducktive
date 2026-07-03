@@ -1,8 +1,8 @@
-# Sopro Ducktive
+# Motive
 
-Sopro Ducktive is a mobile-first gamified productivity app for turning real-life goals, chores, habits, and household routines into quests. The initial product is designed for married couples and households, with an architecture that can expand to individuals, families, and groups.
+Motive is a mobile-first gamified productivity app for turning real-life goals, chores, habits, and routines into daily, weekly, monthly, and yearly progress.
 
-Sopro is the duck mascot and a core part of the brand identity. Ducktive is the casual shorthand users can use for the app. Mascot artwork, outfits, cosmetics, streaks, seasonal achievements, and household progression are intentionally left for future versions.
+Mo is the short name for the app. Character cosmetics, streak rewards, seasonal achievements, and deeper progression are intentionally left for future versions.
 
 ## Stack
 
@@ -47,7 +47,7 @@ cp .env.example .env.local
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=your-project-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=your-publishable-key
 ```
 
 4. Apply the database migration in `supabase/migrations/0001_initial_schema.sql` using the Supabase SQL editor or Supabase CLI:

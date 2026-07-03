@@ -6,7 +6,7 @@ export type LevelSnapshot = {
 };
 
 export function xpRequiredForLevel(level: number) {
-  return Math.round(100 * Math.pow(level, 1.45));
+  return Math.min(500, 100 + Math.max(0, level - 1) * 10);
 }
 
 export function getLevelSnapshot(totalXp: number): LevelSnapshot {

@@ -1,0 +1,134 @@
+"use client";
+
+import { createClient } from "@/lib/supabase/client";
+import { syncCurrentPublicProfile } from "@/lib/public-profile";
+
+const BACKUP_META_KEY = "motive-backup-updated-at";
+
+const BACKUP_KEYS = [
+  "sopro-ducktive-daily-v1",
+  "sopro-ducktive-cycle-tasks-v1",
+  "sopro-ducktive-theme",
+  "sopro-ducktive-avatar-config-v1",
+  "sopro-ducktive-avatar-paused",
+  "sopro-ducktive-admin-unlocked"
+];
+
+let backupTimeout: number | null = null;
+let backupInFlight = false;
+let backupQueued = false;
+
+function readStateSnapshot() {
+  return Object.fromEntries(
+    BACKUP_KEYS.map((key) => [key, window.localStorage.getItem(key)]).filter(([, value]) => value !== null)
+  );
+}
+
+export async function backupMotiveState() {
+  if (typeof window === "undefined" || backupInFlight) {
+    backupQueued = backupInFlight;
+    return;
+  }
+
+  backupInFlight = true;
+
+  try {
+    const supabase = createClient();
+    const { data } = await supabase.auth.getUser();
+    const userId = data.user?.id;
+
+    if (!userId) {
+      return;
+    }
+
+    const updatedAt = new Date().toISOString();
+    const state = {
+      ...readStateSnapshot(),
+      [BACKUP_META_KEY]: updatedAt
+    };
+
+    const { error } = await supabase
+      .from("app_user_state")
+      .upsert({ user_id: userId, state, updated_at: updatedAt }, { onConflict: "user_id" });
+
+    if (!error) {
+      window.localStorage.setItem(BACKUP_META_KEY, updatedAt);
+      void syncCurrentPublicProfile(supabase, userId);
+    } else {
+      console.warn("Motive backup failed", error.message);
+    }
+  } catch (error) {
+    console.warn("Motive backup failed", error);
+  } finally {
+    backupInFlight = false;
+    if (backupQueued) {
+      backupQueued = false;
+      scheduleMotiveBackup(750);
+    }
+  }
+}
+
+export function scheduleMotiveBackup(delay = 1200) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (backupTimeout !== null) {
+    window.clearTimeout(backupTimeout);
+  }
+
+  backupTimeout = window.setTimeout(() => {
+    backupTimeout = null;
+    void backupMotiveState();
+  }, delay);
+}
+
+export async function restoreMotiveStateFromBackup() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    const supabase = createClient();
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+
+    if (!userId) {
+      return false;
+    }
+
+    const { data, error } = await supabase
+      .from("app_user_state")
+      .select("state, updated_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error || !data?.state) {
+      return false;
+    }
+
+    const cloudState = data.state as Record<string, string | null>;
+    const localBackupAt = window.localStorage.getItem(BACKUP_META_KEY);
+    const hasLocalProgress = BACKUP_KEYS.some((key) => window.localStorage.getItem(key) !== null);
+    const cloudIsNewer = localBackupAt
+      ? new Date(data.updated_at).getTime() > new Date(localBackupAt).getTime()
+      : false;
+
+    if (hasLocalProgress && (!localBackupAt || !cloudIsNewer)) {
+      return false;
+    }
+
+    for (const key of BACKUP_KEYS) {
+      const value = cloudState[key];
+      if (typeof value === "string") {
+        window.localStorage.setItem(key, value);
+      }
+    }
+
+    window.localStorage.setItem(BACKUP_META_KEY, data.updated_at);
+    return true;
+  } catch (error) {
+    console.warn("Motive restore failed", error);
+    return false;
+  }
+}

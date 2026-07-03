@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Creature Mixer Local Editor</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #080a14;
+      --panel: #191c2b;
+      --muted: #252a3c;
+      --text: #f7f7fb;
+      --soft: #a9b5d6;
+      --primary: #944bff;
+      --secondary: #ffd400;
+      --accent: #10c7a6;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 20% 0%, rgba(148, 75, 255, 0.35), transparent 28rem),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      display: grid;
+      grid-template-columns: minmax(280px, 420px) 1fr;
+      min-height: 100vh;
+    }
+
+    .preview {
+      display: grid;
+      place-items: center;
+      padding: 18px 32px;
+      border-right: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .stage-card {
+      width: min(88vw, 360px);
+      display: grid;
+      gap: 12px;
+    }
+
+    .stage {
+      position: relative;
+      height: 220px;
+      image-rendering: pixelated;
+      border: 1px solid rgba(255, 255, 255, 0);
+      border-radius: 28px;
+      background:
+        linear-gradient(45deg, rgba(255,255,255,0.045) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(255,255,255,0.045) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.045) 75%),
+        linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.045) 75%),
+        var(--stage-bg, #111522);
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+      background-size: 20px 20px;
+      overflow: hidden;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.35);
+    }
+
+    .creature {
+      position: absolute;
+      inset: 0;
+      transform: translate(var(--x, 0px), calc(var(--y, 0px) + var(--bob, 0px))) scale(9);
+      transform-origin: center;
+      transition: transform 170ms ease-in-out;
+    }
+
+    .creature img {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 16px;
+      height: 16px;
+      transform: translate3d(-50%, -50%, 0);
+      image-rendering: pixelated;
+      backface-visibility: hidden;
+      will-change: transform;
+    }
+
+    .creature img.layer-Legs {
+      transform: translate3d(-50%, calc(-50% + 1px), 0);
+    }
+
+    .creature img.part-legs-default,
+    .creature img.part-legs-blob,
+    .creature img.part-legs-ghost,
+    .creature img.part-legs-thin {
+      transform: translate3d(-50%, -50%, 0);
+    }
+
+    .creature img.layer-Arms {
+      transform: translate3d(-50%, calc(-50% + var(--arm-bob, 0px)), 0);
+      transition: transform 170ms ease-in-out;
+    }
+
+    .creature img.layer-Face {
+      transform: translate3d(-46%, -42%, 0);
+    }
+
+    .creature img.layer-Beard {
+      transform: translate3d(-46%, -50%, 0);
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .nudge {
+      display: none;
+    }
+
+    button {
+      border: 0;
+      color: var(--text);
+      background: var(--muted);
+      border-radius: 14px;
+      min-height: 42px;
+      padding: 0 14px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    button:hover { filter: brightness(1.08); }
+    button.active { background: var(--primary); }
+    button.swatch.active { background: var(--swatch); }
+
+    .editor {
+      padding: 28px;
+      min-width: 0;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+    }
+
+    .tabs button {
+      white-space: nowrap;
+      color: var(--soft);
+    }
+
+    .tabs button.active {
+      color: white;
+    }
+
+    .palette {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: -4px 0 18px;
+      padding: 10px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.045);
+    }
+
+    .swatch {
+      width: 28px;
+      min-width: 28px;
+      height: 28px;
+      min-height: 28px;
+      padding: 0;
+      border: 2px solid rgba(255, 255, 255, 0.12);
+      border-radius: 10px;
+      background: var(--swatch);
+    }
+
+    .swatch.active {
+      border-color: rgba(255, 255, 255, 0.9);
+      box-shadow: 0 0 0 3px rgba(255, 212, 0, 0.34);
+    }
+
+    .parts {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(74px, 1fr));
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .palette:empty {
+      display: none;
+    }
+
+    .palette-wrap {
+      margin-bottom: 18px;
+    }
+
+    .palette-toggle {
+      display: none;
+    }
+
+    .part {
+      display: grid;
+      place-items: center;
+      gap: 6px;
+      padding: 10px 6px;
+      min-height: 84px;
+      border-radius: 18px;
+      color: var(--soft);
+      background: var(--panel);
+    }
+
+    .part.active {
+      outline: 2px solid var(--primary);
+      background: rgba(148, 75, 255, 0.18);
+    }
+
+    .part img {
+      width: 48px;
+      height: 48px;
+      image-rendering: pixelated;
+      object-fit: contain;
+    }
+
+    .part span {
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .hint {
+      margin-top: 16px;
+      color: var(--soft);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    @media (max-width: 820px) {
+      main { grid-template-columns: 1fr; }
+      .preview { padding: 10px 24px 14px; border-right: 0; border-bottom: 1px solid rgba(255,255,255,0.08); }
+      .stage-card { width: min(88vw, 320px); }
+      .stage { height: 150px; }
+      .creature { transform: translate(var(--x, 0px), calc(var(--y, 0px) + var(--bob, 0px))) scale(8); }
+      .editor { padding: 18px; }
+      .palette-wrap {
+        display: grid;
+        grid-template-columns: 42px minmax(0, 1fr);
+        gap: 8px;
+        align-items: start;
+        margin-bottom: 18px;
+      }
+      .palette-toggle {
+        display: inline-grid;
+        place-items: center;
+        min-width: 42px;
+        width: 42px;
+        padding: 0;
+      }
+      .palette {
+        max-height: 48px;
+        overflow: hidden;
+        margin: 0;
+      }
+      .palette-wrap.expanded .palette {
+        max-height: none;
+      }
+      .palette-wrap.background-colors {
+        grid-template-columns: 1fr;
+      }
+      .palette-wrap.background-colors .palette-toggle {
+        display: none;
+      }
+      .palette-wrap.background-colors .palette {
+        max-height: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="preview">
+      <div class="stage-card">
+        <div class="stage">
+          <div id="creature" class="creature"></div>
+        </div>
+        <div class="toolbar">
+          <button id="play" class="active" type="button">Play</button>
+          <button id="random" type="button">Random</button>
+          <button id="reset" type="button">Reset</button>
+        </div>
+        <div class="nudge">
+          <button type="button" data-move="up">↑</button>
+          <button type="button" data-move="left">←</button>
+          <button type="button" data-move="down">↓</button>
+          <button type="button" data-move="right">→</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="editor">
+      <div id="tabs" class="tabs"></div>
+      <div id="paletteWrap" class="palette-wrap">
+        <button id="paletteToggle" class="palette-toggle" type="button" aria-label="Show more colors">v</button>
+        <div id="palette" class="palette"></div>
+      </div>
+      <div id="parts" class="parts"></div>
+    </section>
+  </main>
+
+  <script>
+    const base = "source/PNG/";
+    const generatedBase = "generated/";
+    const categories = {
+      Body: ["body-default.png","body01.png","body02.png","body03.png","body04.png","body-alien.png","body-antenna.png","body-bear.png","body-bunny.png","body-cone.png","body-ears.png","body-flaps.png","body-horns.png","body-hornslarge.png","body-long.png","body-pointy.png","body-pole.png","body-round.png","body-sides.png","body-smallantenna.png","body-square.png","body-sticks.png"],
+      Legs: ["legs-default.png","legs-blob.png","legs-four.png","legs-ghost.png","legs-insect.png","legs-pixel.png","legs-robot.png","legs-spider.png","legs-thin.png"],
+      Arms: ["arms-default.png","arms01.png","arms02.png","arms03.png","arms-bend.png","arms-crab.png","arms-down.png","arms-fingers.png","arms-gloves.png","arms-large.png","arms-noodle.png","arms-rings.png","arms-robot.png","arms-robotic.png","arms-side.png","arms-small.png","arms-spheres.png","arms-spider.png","arms-tentacle.png","arms-wide.png"],
+      Face: ["face-default.png","face-bored.png","face-cool.png","face-cyclops.png","face-dots.png","face-evil.png","face-eye.png","face-eyepatch.png","face-eyes.png","face-glasses.png","face-grumpy.png","face-happy.png","face-helmet.png","face-monster.png","face-puppet.png","face-robot.png","face-sad.png","face-sleep.png","face-small.png","face-specs.png","face-threeeyes.png"],
+      Beard: ["transparent.png","facial-beardA.png","facial-beardB.png","facial-beardC.png","facial-beardD.png","facial-beardE.png","facial-moustacheA.png","facial-moustacheB.png","facial-moustacheC.png","facial-moustacheD.png","facial-moustacheE.png"],
+      Hair: ["transparent.png","hair-bob.png","hair-clown.png","hair-emo.png","hair-fro.png","hair-little.png","hair-mid.png","hair-pony.png","hair-punk.png","hair-short.png","hair-slick.png","hair-spike.png","hair-wild.png"],
+      Hat: ["transparent.png","hat-adventure.png","hat-arrow.png","hat-backwards.png","hat-band.png","hat-beanie.png","hat-bowl.png","hat-cap.png","hat-helmet.png","hat-helmethorns.png","hat-military.png","hat-ninja.png","hat-pirate.png","hat-space.png","hat-wizard.png"],
+      Detail: ["transparent.png","detail-fairy.png","detail-tail.png","detail-tailarrow.png","detail-tailthick.png","detail-tailthin.png","detail-wings.png","detail-wingsbat.png","detail-wingslarge.png"]
+    };
+
+    const layerOrder = ["Detail", "Body", "Legs", "Arms", "Face", "Beard", "Hair", "Hat"];
+    const tabOrder = ["Background", "Body", "Legs", "Arms", "Face", "Beard", "Hair", "Hat", "Detail"];
+    const defaultState = {
+      Body: "body-default.png",
+      Legs: "legs-default.png",
+      Arms: "arms-default.png",
+      Face: "face-default.png",
+      Beard: "transparent.png",
+      Hair: "transparent.png",
+      Hat: "transparent.png",
+      Detail: "transparent.png"
+    };
+    const state = { ...defaultState };
+    const defaultColor = "#e6edf2";
+    const colors = {
+      ...Object.fromEntries(layerOrder.map((category) => [category, defaultColor])),
+      Background: "#111827"
+    };
+    const paletteColors = [
+      "#e6edf2", "#dc3f4f", "#e86f35", "#e9c84a", "#35b86b", "#2aa99c",
+      "#45a8d8", "#5f67d8", "#9352d9", "#d1538f", "#8fa0b6", "#202837",
+      "#ffffff", "#f8c7d8", "#f2a65a", "#b7e06b", "#72d6c9", "#8fd3ff",
+      "#bca7ff", "#ff86c8", "#c89463", "#7c5c42", "#56657a", "#111827"
+    ];
+    const frameSequence = [0, 1, 2, 1];
+    const bobSequence = [2, -3, 2, 0];
+    const armBobSequence = [0, -0.5, 0.5, 0];
+
+    let activeCategory = "Body";
+    let frame = 0;
+    let playing = true;
+    let offset = { x: 0, y: 0 };
+    let timer = null;
+
+    const tabs = document.querySelector("#tabs");
+    const paletteWrap = document.querySelector("#paletteWrap");
+    const paletteToggle = document.querySelector("#paletteToggle");
+    const palette = document.querySelector("#palette");
+    const parts = document.querySelector("#parts");
+    const creature = document.querySelector("#creature");
+    const play = document.querySelector("#play");
+
+    function imageFor(category, name, frameIndex = frame) {
+      if (category === "Legs" && name.endsWith(".png")) {
+        const stem = name.replace(".png", "");
+        return `${base}${stem}${frameSequence[frameIndex]}.png`;
+      }
+      return `${base}${name}`;
+    }
+
+    function categoriesForColor(category) {
+      return ["Body", "Arms", "Legs"].includes(category) ? ["Body", "Arms", "Legs", "Face"] : [category];
+    }
+
+    function colorForCategory(category) {
+      return ["Arms", "Legs", "Face"].includes(category) ? colors.Body : colors[category];
+    }
+
+    function updateStageBackground() {
+      document.querySelector(".stage").style.setProperty("--stage-bg", colors.Background);
+    }
+
+    function colorKey(color) {
+      return color.replace("#", "");
+    }
+
+    function coloredImageFor(category, name, frameIndex = frame) {
+      const src = imageFor(category, name, frameIndex);
+      if (src.endsWith("transparent.png")) return src;
+      return `${generatedBase}${colorKey(colorForCategory(category))}/${src.replace(base, "")}`;
+    }
+
+    function label(name) {
+      if (name === "transparent.png") return "none";
+      return name.replace(".png", "").replace(/^(body|arms|legs|face|facial|hair|hat|detail)-?/, "") || "none";
+    }
+
+    function partClass(category, name) {
+      return `part-${name.replace(".png", "").replace(/\d$/, "").replace(/[^a-z0-9]+/gi, "-")}`;
+    }
+
+    function renderTabs() {
+      tabs.innerHTML = "";
+      tabOrder.forEach((category) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = category;
+        button.className = category === activeCategory ? "active" : "";
+        button.onclick = () => {
+          activeCategory = category;
+          renderTabs();
+          renderPalette();
+          renderParts();
+        };
+        tabs.append(button);
+      });
+    }
+
+    function renderPalette() {
+      palette.innerHTML = "";
+      const wasExpanded = paletteWrap.classList.contains("expanded");
+      paletteWrap.classList.toggle("background-colors", activeCategory === "Background");
+      if (activeCategory === "Background") {
+        paletteWrap.classList.remove("expanded");
+        paletteToggle.textContent = "v";
+      } else {
+        paletteWrap.classList.toggle("expanded", wasExpanded);
+        paletteToggle.textContent = wasExpanded ? "^" : "v";
+      }
+      if (activeCategory === "Face") {
+        paletteWrap.hidden = true;
+        return;
+      }
+      paletteWrap.hidden = false;
+      paletteColors.forEach((color) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = colorForCategory(activeCategory) === color ? "swatch active" : "swatch";
+        button.style.setProperty("--swatch", color);
+        button.title = `Set ${activeCategory} color`;
+        button.onclick = () => {
+          categoriesForColor(activeCategory).forEach((category) => {
+            colors[category] = color;
+          });
+          updateStageBackground();
+          renderPalette();
+          renderParts();
+          renderCreature();
+        };
+        palette.append(button);
+      });
+    }
+
+    function renderParts() {
+      parts.innerHTML = "";
+      if (activeCategory === "Background") return;
+      categories[activeCategory].forEach((name) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = state[activeCategory] === name ? "part active" : "part";
+        button.onclick = () => {
+          state[activeCategory] = name;
+          renderParts();
+          renderCreature();
+        };
+
+        const img = document.createElement("img");
+        const partSrc = coloredImageFor(activeCategory, name, 0);
+        img.src = partSrc;
+        img.alt = label(name);
+        img.onerror = () => { img.src = `${base}transparent.png`; };
+
+        const span = document.createElement("span");
+        span.textContent = label(name);
+
+        button.append(img, span);
+        parts.append(button);
+      });
+    }
+
+    function updateCreatureMotion() {
+      creature.style.setProperty("--x", `${offset.x}px`);
+      creature.style.setProperty("--y", `${offset.y}px`);
+      creature.style.setProperty("--bob", playing ? `${bobSequence[frame]}px` : "0px");
+      creature.style.setProperty("--arm-bob", playing ? `${armBobSequence[frame]}px` : "0px");
+    }
+
+    function renderCreature() {
+      updateCreatureMotion();
+      if (!creature.children.length) {
+        layerOrder.forEach((category) => {
+          const img = document.createElement("img");
+          img.alt = "";
+          img.className = `layer-${category}`;
+          img.onerror = () => { img.src = `${base}transparent.png`; };
+          creature.append(img);
+        });
+      }
+
+      layerOrder.forEach((category, index) => {
+        const img = creature.children[index];
+        const nextSrc = coloredImageFor(category, state[category]);
+        img.className = `layer-${category} ${partClass(category, state[category])}`;
+        if (img.getAttribute("src") !== nextSrc) {
+          img.src = nextSrc;
+        }
+      });
+    }
+
+    function tick() {
+      frame = (frame + 1) % frameSequence.length;
+      renderCreature();
+    }
+
+    function setPlaying(value) {
+      playing = value;
+      if (!playing) frame = 0;
+      play.className = playing ? "active" : "";
+      play.textContent = playing ? "Play" : "Paused";
+      clearInterval(timer);
+      timer = playing ? setInterval(tick, 180) : null;
+      renderCreature();
+    }
+
+    play.onclick = () => setPlaying(!playing);
+
+    paletteToggle.onclick = () => {
+      paletteWrap.classList.toggle("expanded");
+      paletteToggle.textContent = paletteWrap.classList.contains("expanded") ? "^" : "v";
+    };
+
+    creature.onclick = () => {
+      if (playing) return;
+      frame = (frame + 1) % frameSequence.length;
+      renderCreature();
+    };
+
+    document.querySelector("#random").onclick = () => {
+      Object.keys(categories).forEach((category) => {
+        const options = categories[category];
+        state[category] = options[Math.floor(Math.random() * options.length)];
+      });
+      renderParts();
+      renderCreature();
+    };
+
+    document.querySelector("#reset").onclick = () => {
+      Object.assign(state, {
+        ...defaultState
+      });
+      Object.keys(colors).forEach((category) => {
+        colors[category] = category === "Background" ? "#111827" : defaultColor;
+      });
+      offset = { x: 0, y: 0 };
+      updateStageBackground();
+      renderPalette();
+      renderParts();
+      renderCreature();
+    };
+
+    document.querySelectorAll("[data-move]").forEach((button) => {
+      button.onclick = () => {
+        const move = button.dataset.move;
+        if (move === "up") offset.y -= 4;
+        if (move === "down") offset.y += 4;
+        if (move === "left") offset.x -= 4;
+        if (move === "right") offset.x += 4;
+        renderCreature();
+      };
+    });
+
+    renderTabs();
+    updateStageBackground();
+    renderPalette();
+    renderParts();
+    renderCreature();
+    setPlaying(true);
+  </script>
+</body>
+</html>
