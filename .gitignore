@@ -9,4 +9,4 @@ coverage
 .vercel
 *.log
 supabase/.temp
-assets/creature-mixer-editor
+assets/
