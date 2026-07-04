@@ -25,7 +25,7 @@ export function AuthForm({ mode }: AuthFormProps) {
     setMessage(null);
 
     const formData = new FormData(event.currentTarget);
-    const email = String(formData.get("email"));
+    const email = String(formData.get("email")).trim();
     const password = String(formData.get("password"));
     const supabase = createClient();
 
@@ -42,6 +42,16 @@ export function AuthForm({ mode }: AuthFormProps) {
 
     if (result.error) {
       setMessage(result.error.message);
+      return;
+    }
+
+    if (
+      mode === "signup" &&
+      result.data.user &&
+      Array.isArray(result.data.user.identities) &&
+      result.data.user.identities.length === 0
+    ) {
+      setMessage("An account already exists with that email. Log in or use forgot password.");
       return;
     }
 
