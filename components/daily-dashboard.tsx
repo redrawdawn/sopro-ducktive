@@ -40,8 +40,14 @@ import {
 } from "lucide-react";
 import { getLevelSnapshot } from "@/lib/levels";
 import { AVATAR_ADMIN_UNLOCK_KEY } from "@/lib/avatar";
-import { restoreMotiveStateFromBackup, scheduleMotiveBackup } from "@/lib/motive-backup";
-import { isPublicProfileEnabled, setPublicProfileEnabled, syncCurrentPublicProfile } from "@/lib/public-profile";
+import { backupMotiveState, restoreMotiveStateFromBackup, scheduleMotiveBackup } from "@/lib/motive-backup";
+import {
+  getStoredPublicDisplayName,
+  isPublicProfileEnabled,
+  savePublicDisplayName,
+  setPublicProfileEnabled,
+  syncCurrentPublicProfile
+} from "@/lib/public-profile";
 import { createClient } from "@/lib/supabase/client";
 import { AvatarCharacter } from "@/components/avatar-character";
 import { Button } from "@/components/ui/button";
@@ -460,7 +466,11 @@ export function DailyDashboard() {
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
   const [logoutLoading, setLogoutLoading] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [publicProfileEnabled, setPublicProfileEnabledState] = useState(false);
+  const [accountEmail, setAccountEmail] = useState("");
+  const [profileDisplayName, setProfileDisplayName] = useState("");
+  const [profileNameSaved, setProfileNameSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<TaskTab>("daily");
   const [now, setNow] = useState(() => new Date());
   const [xpPulse, setXpPulse] = useState(false);
@@ -496,6 +506,8 @@ export function DailyDashboard() {
   useEffect(() => {
     async function loadLocalAndCloudState() {
       await restoreMotiveStateFromBackup();
+      const supabase = createClient();
+      const { data } = await supabase.auth.getUser();
 
       setDailyState(loadState());
       setCycleState(loadCycleState());
@@ -506,6 +518,8 @@ export function DailyDashboard() {
       }
       setAdminUnlocked(window.localStorage.getItem(AVATAR_ADMIN_UNLOCK_KEY) === "true");
       setPublicProfileEnabledState(isPublicProfileEnabled());
+      setAccountEmail(data.user?.email ?? "");
+      setProfileDisplayName(getStoredPublicDisplayName());
       setStorageReady(true);
     }
 
@@ -612,6 +626,16 @@ export function DailyDashboard() {
     scheduleMotiveBackup(250);
   }
 
+  async function saveProfileName(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    savePublicDisplayName(profileDisplayName);
+    setProfileDisplayName(getStoredPublicDisplayName());
+    await syncCurrentPublicProfile();
+    scheduleMotiveBackup(250);
+    setProfileNameSaved(true);
+    window.setTimeout(() => setProfileNameSaved(false), 1600);
+  }
+
   function triggerCompletionBurst(taskId: string) {
     const id = createId();
     setCompletionBursts((current) => [...current, { taskId, id }]);
@@ -683,9 +707,11 @@ export function DailyDashboard() {
 
   async function logout() {
     setLogoutLoading(true);
+    await backupMotiveState();
     const supabase = createClient();
     await supabase.auth.signOut();
     setLogoutLoading(false);
+    setLogoutConfirmOpen(false);
     router.refresh();
     router.push("/login");
   }
@@ -1381,6 +1407,34 @@ export function DailyDashboard() {
               </button>
             </div>
             <div className="space-y-3">
+            <div className="rounded-2xl bg-muted p-3">
+              <div className="font-black">Account</div>
+              <div className="mt-1 break-all text-xs font-semibold text-muted-foreground">
+                {accountEmail || "Signed in"}
+              </div>
+            </div>
+            <form onSubmit={saveProfileName} className="rounded-2xl bg-muted p-3">
+              <label className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground" htmlFor="settings-profile-name">
+                Name
+              </label>
+              <div className="mt-2 flex gap-2">
+                <Input
+                  id="settings-profile-name"
+                  value={profileDisplayName}
+                  onChange={(event) => {
+                    setProfileNameSaved(false);
+                    setProfileDisplayName(event.target.value);
+                  }}
+                  maxLength={24}
+                  placeholder="Name"
+                  className="h-11 border-0 bg-background text-base font-black"
+                />
+                <Button type="submit" size="sm" className="h-11 shrink-0">
+                  Save
+                </Button>
+              </div>
+              {profileNameSaved ? <p className="mt-2 text-xs font-black text-accent">Saved</p> : null}
+            </form>
             <div className="flex items-center justify-between gap-4 rounded-2xl bg-muted p-3">
               <div>
                 <div className="font-black">Theme</div>
@@ -1460,9 +1514,30 @@ export function DailyDashboard() {
                 </div>
               ) : null}
             </div>
-            <Button type="button" variant="outline" className="w-full" onClick={logout} disabled={logoutLoading}>
+            <Button type="button" variant="outline" className="w-full" onClick={() => setLogoutConfirmOpen(true)} disabled={logoutLoading}>
               {logoutLoading ? "Logging out..." : "Log out"}
             </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {logoutConfirmOpen ? (
+        <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/40 px-5 pb-5 backdrop-blur-sm sm:items-center">
+          <div className="neon-card w-full max-w-md rounded-3xl p-5">
+            <div className="mb-4">
+              <h2 className="text-xl font-black">Log out?</h2>
+              <p className="mt-2 text-sm font-semibold text-muted-foreground">
+                Your latest Motive data will be backed up before you leave this account.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Button type="button" variant="outline" onClick={() => setLogoutConfirmOpen(false)} disabled={logoutLoading}>
+                Cancel
+              </Button>
+              <Button type="button" onClick={logout} disabled={logoutLoading}>
+                {logoutLoading ? "Logging out..." : "Log out"}
+              </Button>
             </div>
           </div>
         </div>

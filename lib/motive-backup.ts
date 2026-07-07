@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { syncCurrentPublicProfile } from "@/lib/public-profile";
 
 const BACKUP_META_KEY = "motive-backup-updated-at";
+const BACKUP_USER_KEY = "motive-backup-user-id";
 
 const BACKUP_KEYS = [
   "sopro-ducktive-daily-v1",
@@ -11,7 +12,10 @@ const BACKUP_KEYS = [
   "sopro-ducktive-theme",
   "sopro-ducktive-avatar-config-v1",
   "sopro-ducktive-avatar-paused",
-  "sopro-ducktive-admin-unlocked"
+  "sopro-ducktive-admin-unlocked",
+  "sopro-ducktive-claimed-rewards-v1",
+  "motive-public-profile-enabled",
+  "motive-public-profile-name"
 ];
 
 let backupTimeout: number | null = null;
@@ -44,7 +48,8 @@ export async function backupMotiveState() {
     const updatedAt = new Date().toISOString();
     const state = {
       ...readStateSnapshot(),
-      [BACKUP_META_KEY]: updatedAt
+      [BACKUP_META_KEY]: updatedAt,
+      [BACKUP_USER_KEY]: userId
     };
 
     const { error } = await supabase
@@ -53,6 +58,7 @@ export async function backupMotiveState() {
 
     if (!error) {
       window.localStorage.setItem(BACKUP_META_KEY, updatedAt);
+      window.localStorage.setItem(BACKUP_USER_KEY, userId);
       void syncCurrentPublicProfile(supabase, userId);
     } else {
       console.warn("Motive backup failed", error.message);
@@ -109,12 +115,14 @@ export async function restoreMotiveStateFromBackup() {
 
     const cloudState = data.state as Record<string, string | null>;
     const localBackupAt = window.localStorage.getItem(BACKUP_META_KEY);
+    const localBackupUserId = window.localStorage.getItem(BACKUP_USER_KEY);
     const hasLocalProgress = BACKUP_KEYS.some((key) => window.localStorage.getItem(key) !== null);
+    const localBelongsToUser = localBackupUserId === userId;
     const cloudIsNewer = localBackupAt
       ? new Date(data.updated_at).getTime() > new Date(localBackupAt).getTime()
       : false;
 
-    if (hasLocalProgress && (!localBackupAt || !cloudIsNewer)) {
+    if (hasLocalProgress && localBelongsToUser && !cloudIsNewer) {
       return false;
     }
 
@@ -126,6 +134,7 @@ export async function restoreMotiveStateFromBackup() {
     }
 
     window.localStorage.setItem(BACKUP_META_KEY, data.updated_at);
+    window.localStorage.setItem(BACKUP_USER_KEY, userId);
     return true;
   } catch (error) {
     console.warn("Motive restore failed", error);

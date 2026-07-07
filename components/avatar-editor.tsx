@@ -25,10 +25,8 @@ import {
   type AvatarEditorTab
 } from "@/lib/avatar";
 import { scheduleMotiveBackup } from "@/lib/motive-backup";
-import { getStoredPublicDisplayName, savePublicDisplayName } from "@/lib/public-profile";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
 const frameSequence = [0, 1, 2, 1];
 const bobSequence = [2, -3, 2, 0];
@@ -65,13 +63,11 @@ export function AvatarEditor({ onClose }: AvatarEditorProps) {
   const [previewPaused, setPreviewPaused] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [displayName, setDisplayName] = useState("");
   const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [lockedHint, setLockedHint] = useState<{ name: string; message: string } | null>(null);
 
   useEffect(() => {
     setDraft(getStoredAvatarConfig());
-    setDisplayName(getStoredPublicDisplayName());
     setAdminUnlocked(window.localStorage.getItem(AVATAR_ADMIN_UNLOCK_KEY) === "true");
 
     function syncAdmin() {
@@ -132,7 +128,6 @@ export function AvatarEditor({ onClose }: AvatarEditorProps) {
   }
 
   function saveChanges() {
-    savePublicDisplayName(displayName);
     saveAvatarConfig(draft);
     scheduleMotiveBackup(250);
     setSaved(true);
@@ -170,23 +165,6 @@ export function AvatarEditor({ onClose }: AvatarEditorProps) {
             </Button>
           ) : null}
         </div>
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground" htmlFor="profile-display-name">
-          Name
-        </label>
-        <Input
-          id="profile-display-name"
-          value={displayName}
-          maxLength={24}
-          onChange={(event) => {
-            setSaved(false);
-            setDisplayName(event.target.value);
-          }}
-          placeholder="Name"
-          className="h-12 rounded-2xl bg-background/80 text-base font-black"
-        />
       </div>
 
       <div
