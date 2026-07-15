@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Motive",
   description: "Quests, XP, and shared progress.",
   applicationName: "Motive",
+  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     title: "Motive",
