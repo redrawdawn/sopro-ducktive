@@ -13,6 +13,16 @@ type AuthFormProps = {
   mode: "login" | "signup";
 };
 
+function friendlyAuthError(message: string) {
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("failed to fetch") || normalized.includes("network")) {
+    return "Could not reach Motive's login service. Check the Supabase project URL/status, then try again.";
+  }
+
+  return message;
+}
+
 export function AuthForm({ mode }: AuthFormProps) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
@@ -41,7 +51,7 @@ export function AuthForm({ mode }: AuthFormProps) {
     setLoading(false);
 
     if (result.error) {
-      setMessage(result.error.message);
+      setMessage(friendlyAuthError(result.error.message));
       return;
     }
 
@@ -87,7 +97,7 @@ export function AuthForm({ mode }: AuthFormProps) {
     });
 
     setResetLoading(false);
-    setMessage(error ? error.message : "Password reset email sent.");
+    setMessage(error ? friendlyAuthError(error.message) : "Password reset email sent.");
   }
 
   return (
