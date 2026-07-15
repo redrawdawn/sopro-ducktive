@@ -467,6 +467,9 @@ export function DailyDashboard() {
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [deleteAccountConfirmOpen, setDeleteAccountConfirmOpen] = useState(false);
+  const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   const [publicProfileEnabled, setPublicProfileEnabledState] = useState(false);
   const [accountEmail, setAccountEmail] = useState("");
   const [profileDisplayName, setProfileDisplayName] = useState("");
@@ -714,6 +717,33 @@ export function DailyDashboard() {
     setLogoutConfirmOpen(false);
     router.refresh();
     router.push("/login");
+  }
+
+  async function deleteAccount() {
+    setDeleteAccountLoading(true);
+    setDeleteAccountError(null);
+
+    try {
+      const response = await fetch("/api/account", { method: "DELETE" });
+      const result = (await response.json().catch(() => ({}))) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(result.error ?? "Account deletion failed.");
+      }
+
+      const supabase = createClient();
+      await supabase.auth.signOut();
+      window.localStorage.clear();
+      window.sessionStorage.clear();
+      setDeleteAccountLoading(false);
+      setDeleteAccountConfirmOpen(false);
+      setLogoutConfirmOpen(false);
+      router.refresh();
+      router.push("/signup");
+    } catch (error) {
+      setDeleteAccountError(error instanceof Error ? error.message : "Account deletion failed.");
+      setDeleteAccountLoading(false);
+    }
   }
 
   function addTask(event: React.FormEvent<HTMLFormElement>) {
@@ -1532,11 +1562,49 @@ export function DailyDashboard() {
               </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Button type="button" variant="outline" onClick={() => setLogoutConfirmOpen(false)} disabled={logoutLoading}>
+              <Button type="button" variant="outline" onClick={() => setLogoutConfirmOpen(false)} disabled={logoutLoading || deleteAccountLoading}>
                 Cancel
               </Button>
-              <Button type="button" onClick={logout} disabled={logoutLoading}>
+              <Button type="button" onClick={logout} disabled={logoutLoading || deleteAccountLoading}>
                 {logoutLoading ? "Logging out..." : "Log out"}
+              </Button>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-3 w-full text-xs text-destructive hover:bg-destructive/10"
+              onClick={() => {
+                setDeleteAccountError(null);
+                setDeleteAccountConfirmOpen(true);
+              }}
+              disabled={logoutLoading || deleteAccountLoading}
+            >
+              Delete Account
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteAccountConfirmOpen ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 px-5 pb-5 backdrop-blur-sm sm:items-center">
+          <div className="neon-card w-full max-w-md rounded-3xl border-destructive/40 p-5">
+            <div className="mb-4">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-destructive/15 text-destructive">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <h2 className="text-xl font-black text-destructive">Delete account forever?</h2>
+              <p className="mt-2 text-sm font-semibold text-muted-foreground">
+                This permanently deletes your Motive account and removes your saved account data. This cannot be undone.
+              </p>
+              {deleteAccountError ? <p className="mt-3 text-xs font-semibold text-destructive">{deleteAccountError}</p> : null}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Button type="button" variant="outline" onClick={() => setDeleteAccountConfirmOpen(false)} disabled={deleteAccountLoading}>
+                Cancel
+              </Button>
+              <Button type="button" variant="destructive" onClick={deleteAccount} disabled={deleteAccountLoading}>
+                {deleteAccountLoading ? "Deleting..." : "Delete"}
               </Button>
             </div>
           </div>

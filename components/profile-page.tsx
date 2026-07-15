@@ -262,13 +262,13 @@ export function ProfilePage() {
                   <div className={expanded ? "grid grid-rows-[1fr] transition-all duration-300 ease-out" : "grid grid-rows-[0fr] transition-all duration-300 ease-out"}>
                     <div className="overflow-hidden">
                       <div className="mt-5 grid gap-3 min-[420px]:grid-cols-2">
-                        <div className="flex items-center gap-2 rounded-2xl bg-muted px-3 py-2 text-sm font-bold text-muted-foreground">
-                          <Award className="h-4 w-4 text-secondary" />
-                          {profile.achievements} achievements
+                        <div className="flex items-center justify-center gap-2 rounded-2xl bg-muted px-3 py-2 text-sm font-bold text-muted-foreground" aria-label={`${profile.achievements} achievements`}>
+                          <Award className="h-5 w-5 text-secondary" />
+                          <span className="text-base font-black text-foreground">{profile.achievements}</span>
                         </div>
-                        <div className="flex items-center gap-2 rounded-2xl bg-muted px-3 py-2 text-sm font-bold text-muted-foreground">
-                          <Flame className="h-4 w-4 fill-orange-400 text-orange-400" />
-                          {profile.highestStreak} highest streak
+                        <div className="flex items-center justify-center gap-2 rounded-2xl bg-muted px-3 py-2 text-sm font-bold text-muted-foreground" aria-label={`${profile.highestStreak} highest streak`}>
+                          <Flame className="h-5 w-5 fill-orange-400 text-orange-400" />
+                          <span className="text-base font-black text-foreground">{profile.highestStreak}</span>
                         </div>
                       </div>
 
