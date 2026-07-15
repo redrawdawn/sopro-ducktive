@@ -83,7 +83,7 @@
   .app-shell {
     @apply mx-auto min-h-screen w-full max-w-md bg-background px-5 pb-28 shadow-2xl shadow-black/40 sm:my-6 sm:min-h-[860px] sm:rounded-[2rem] sm:border;
     padding-top: calc(env(safe-area-inset-top, 0px) + 0.15rem);
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 7rem);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8.25rem);
   }
 
   .app-brand {

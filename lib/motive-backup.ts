@@ -99,7 +99,11 @@ export function scheduleMotiveBackup(delay = 1200) {
   }, delay);
 }
 
-export async function restoreMotiveStateFromBackup() {
+type RestoreOptions = {
+  preferCloud?: boolean;
+};
+
+export async function restoreMotiveStateFromBackup(options: RestoreOptions = {}) {
   if (typeof window === "undefined") {
     return false;
   }
@@ -143,7 +147,7 @@ export async function restoreMotiveStateFromBackup() {
       ? new Date(data.updated_at).getTime() > new Date(localBackupAt).getTime()
       : false;
 
-    if (hasLocalProgress && localBelongsToUser && !cloudIsNewer) {
+    if (!options.preferCloud && hasLocalProgress && localBelongsToUser && !cloudIsNewer) {
       return false;
     }
 

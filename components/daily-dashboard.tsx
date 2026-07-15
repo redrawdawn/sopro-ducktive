@@ -506,23 +506,27 @@ export function DailyDashboard() {
   const yearlyStats = useMemo(() => getYearlyTaskStats(dailyState.completionDatesByTask, now), [dailyState.completionDatesByTask, now]);
   const checkCooldownSet = useMemo(() => new Set(checkCooldownIds), [checkCooldownIds]);
 
+  function applyLocalStateToView() {
+    setDailyState(loadState());
+    setCycleState(loadCycleState());
+    const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (savedTheme === "light" || savedTheme === "dark") {
+      setThemeMode(savedTheme);
+      document.documentElement.dataset.theme = savedTheme;
+    }
+    setAdminUnlocked(window.localStorage.getItem(AVATAR_ADMIN_UNLOCK_KEY) === "true");
+    setPublicProfileEnabledState(isPublicProfileEnabled());
+    setProfileDisplayName(getStoredPublicDisplayName());
+  }
+
   useEffect(() => {
     async function loadLocalAndCloudState() {
-      await restoreMotiveStateFromBackup();
+      await restoreMotiveStateFromBackup({ preferCloud: true });
       const supabase = createClient();
       const { data } = await supabase.auth.getUser();
 
-      setDailyState(loadState());
-      setCycleState(loadCycleState());
-      const savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-      if (savedTheme === "light" || savedTheme === "dark") {
-        setThemeMode(savedTheme);
-        document.documentElement.dataset.theme = savedTheme;
-      }
-      setAdminUnlocked(window.localStorage.getItem(AVATAR_ADMIN_UNLOCK_KEY) === "true");
-      setPublicProfileEnabledState(isPublicProfileEnabled());
+      applyLocalStateToView();
       setAccountEmail(data.user?.email ?? "");
-      setProfileDisplayName(getStoredPublicDisplayName());
       setStorageReady(true);
     }
 
@@ -550,6 +554,30 @@ export function DailyDashboard() {
   useEffect(() => {
     const interval = window.setInterval(() => setNow(new Date()), 60000);
     return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    async function refreshFromCloud() {
+      const restored = await restoreMotiveStateFromBackup();
+
+      if (restored) {
+        applyLocalStateToView();
+      }
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void refreshFromCloud();
+      }
+    }
+
+    window.addEventListener("focus", refreshFromCloud);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", refreshFromCloud);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   useEffect(() => {

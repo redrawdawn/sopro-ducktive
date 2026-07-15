@@ -131,7 +131,7 @@ export function BottomMenu() {
   }, []);
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md rounded-t-3xl border border-white/10 bg-card/95 px-5 py-3 backdrop-blur sm:bottom-6 sm:rounded-3xl">
+    <nav className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-md rounded-t-3xl border border-white/10 bg-card/95 px-5 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 backdrop-blur sm:bottom-6 sm:rounded-3xl sm:pb-4">
       <div className="grid grid-cols-3 gap-2">
         {items.map((item) => {
           const active = pathname === item.href;
@@ -142,7 +142,7 @@ export function BottomMenu() {
               href={item.href}
               aria-label={item.label}
               className={cn(
-                "bottom-menu-item relative flex min-h-14 items-center justify-center rounded-2xl text-muted-foreground",
+                "bottom-menu-item relative flex min-h-16 items-center justify-center rounded-2xl text-muted-foreground",
                 active && "bottom-menu-item-active bg-primary/25 text-primary"
               )}
             >
