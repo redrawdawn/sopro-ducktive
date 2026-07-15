@@ -28,6 +28,16 @@ function readStateSnapshot() {
   );
 }
 
+export function clearMotiveLocalState() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  for (const key of [...BACKUP_KEYS, BACKUP_META_KEY, BACKUP_USER_KEY]) {
+    window.localStorage.removeItem(key);
+  }
+}
+
 export async function backupMotiveState() {
   if (typeof window === "undefined" || backupInFlight) {
     backupQueued = backupInFlight;
@@ -103,6 +113,12 @@ export async function restoreMotiveStateFromBackup() {
       return false;
     }
 
+    const localBackupUserId = window.localStorage.getItem(BACKUP_USER_KEY);
+
+    if (localBackupUserId && localBackupUserId !== userId) {
+      clearMotiveLocalState();
+    }
+
     const { data, error } = await supabase
       .from("app_user_state")
       .select("state, updated_at")
@@ -110,20 +126,29 @@ export async function restoreMotiveStateFromBackup() {
       .maybeSingle();
 
     if (error || !data?.state) {
+      if (!error) {
+        clearMotiveLocalState();
+        window.localStorage.setItem(BACKUP_USER_KEY, userId);
+      }
+
       return false;
     }
 
     const cloudState = data.state as Record<string, string | null>;
     const localBackupAt = window.localStorage.getItem(BACKUP_META_KEY);
-    const localBackupUserId = window.localStorage.getItem(BACKUP_USER_KEY);
+    const refreshedLocalBackupUserId = window.localStorage.getItem(BACKUP_USER_KEY);
     const hasLocalProgress = BACKUP_KEYS.some((key) => window.localStorage.getItem(key) !== null);
-    const localBelongsToUser = localBackupUserId === userId;
+    const localBelongsToUser = refreshedLocalBackupUserId === userId;
     const cloudIsNewer = localBackupAt
       ? new Date(data.updated_at).getTime() > new Date(localBackupAt).getTime()
       : false;
 
     if (hasLocalProgress && localBelongsToUser && !cloudIsNewer) {
       return false;
+    }
+
+    for (const key of BACKUP_KEYS) {
+      window.localStorage.removeItem(key);
     }
 
     for (const key of BACKUP_KEYS) {

@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import { getLevelSnapshot } from "@/lib/levels";
 import { AVATAR_ADMIN_UNLOCK_KEY } from "@/lib/avatar";
-import { backupMotiveState, restoreMotiveStateFromBackup, scheduleMotiveBackup } from "@/lib/motive-backup";
+import { backupMotiveState, clearMotiveLocalState, restoreMotiveStateFromBackup, scheduleMotiveBackup } from "@/lib/motive-backup";
 import {
   getStoredPublicDisplayName,
   isPublicProfileEnabled,
@@ -733,7 +733,7 @@ export function DailyDashboard() {
 
       const supabase = createClient();
       await supabase.auth.signOut();
-      window.localStorage.clear();
+      clearMotiveLocalState();
       window.sessionStorage.clear();
       setDeleteAccountLoading(false);
       setDeleteAccountConfirmOpen(false);
