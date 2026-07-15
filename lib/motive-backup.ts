@@ -22,6 +22,13 @@ let backupTimeout: number | null = null;
 let backupInFlight = false;
 let backupQueued = false;
 
+function notifyAccountStateChanged() {
+  window.dispatchEvent(new Event("motive-account-state-change"));
+  window.dispatchEvent(new Event("motive-rewards-claimed-change"));
+  window.dispatchEvent(new Event("motive-public-profile-change"));
+  window.dispatchEvent(new CustomEvent("sopro-avatar-config-change"));
+}
+
 function readStateSnapshot() {
   return Object.fromEntries(
     BACKUP_KEYS.map((key) => [key, window.localStorage.getItem(key)]).filter(([, value]) => value !== null)
@@ -36,6 +43,8 @@ export function clearMotiveLocalState() {
   for (const key of [...BACKUP_KEYS, BACKUP_META_KEY, BACKUP_USER_KEY]) {
     window.localStorage.removeItem(key);
   }
+
+  notifyAccountStateChanged();
 }
 
 export async function backupMotiveState() {
@@ -84,7 +93,7 @@ export async function backupMotiveState() {
   }
 }
 
-export function scheduleMotiveBackup(delay = 1200) {
+export function scheduleMotiveBackup(delay = 250) {
   if (typeof window === "undefined") {
     return;
   }
@@ -133,6 +142,7 @@ export async function restoreMotiveStateFromBackup(options: RestoreOptions = {})
       if (!error) {
         clearMotiveLocalState();
         window.localStorage.setItem(BACKUP_USER_KEY, userId);
+        notifyAccountStateChanged();
       }
 
       return false;
@@ -164,6 +174,7 @@ export async function restoreMotiveStateFromBackup(options: RestoreOptions = {})
 
     window.localStorage.setItem(BACKUP_META_KEY, data.updated_at);
     window.localStorage.setItem(BACKUP_USER_KEY, userId);
+    notifyAccountStateChanged();
     return true;
   } catch (error) {
     console.warn("Motive restore failed", error);

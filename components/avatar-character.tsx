@@ -79,9 +79,11 @@ export function AvatarCharacter({ className, config: providedConfig, forcePaused
     }
 
     window.addEventListener("sopro-avatar-config-change", syncConfig);
+    window.addEventListener("motive-account-state-change", syncConfig);
     window.addEventListener("storage", syncConfig);
     return () => {
       window.removeEventListener("sopro-avatar-config-change", syncConfig);
+      window.removeEventListener("motive-account-state-change", syncConfig);
       window.removeEventListener("storage", syncConfig);
     };
   }, [providedConfig]);

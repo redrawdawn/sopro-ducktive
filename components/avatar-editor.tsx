@@ -24,7 +24,7 @@ import {
   type AvatarConfig,
   type AvatarEditorTab
 } from "@/lib/avatar";
-import { scheduleMotiveBackup } from "@/lib/motive-backup";
+import { backupMotiveState } from "@/lib/motive-backup";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -72,12 +72,15 @@ export function AvatarEditor({ onClose }: AvatarEditorProps) {
 
     function syncAdmin() {
       setAdminUnlocked(window.localStorage.getItem(AVATAR_ADMIN_UNLOCK_KEY) === "true");
+      setDraft(getStoredAvatarConfig());
     }
 
     window.addEventListener("sopro-admin-unlocked-change", syncAdmin);
+    window.addEventListener("motive-account-state-change", syncAdmin);
     window.addEventListener("storage", syncAdmin);
     return () => {
       window.removeEventListener("sopro-admin-unlocked-change", syncAdmin);
+      window.removeEventListener("motive-account-state-change", syncAdmin);
       window.removeEventListener("storage", syncAdmin);
     };
   }, []);
@@ -129,7 +132,7 @@ export function AvatarEditor({ onClose }: AvatarEditorProps) {
 
   function saveChanges() {
     saveAvatarConfig(draft);
-    scheduleMotiveBackup(250);
+    void backupMotiveState();
     setSaved(true);
   }
 

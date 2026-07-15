@@ -7,6 +7,7 @@ import type { CSSProperties } from "react";
 import { Bed, BookOpen, Brain, Dumbbell, Footprints, Lock, LockOpen, Medal, Trophy, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { XpProgressBar } from "@/components/xp-progress-bar";
+import { backupMotiveState } from "@/lib/motive-backup";
 import {
   avatarDefaultAccessoryColor,
   avatarImagePath,
@@ -429,9 +430,11 @@ export default function RewardsPage() {
 
     window.addEventListener("storage", syncState);
     window.addEventListener("focus", syncState);
+    window.addEventListener("motive-account-state-change", syncState);
     return () => {
       window.removeEventListener("storage", syncState);
       window.removeEventListener("focus", syncState);
+      window.removeEventListener("motive-account-state-change", syncState);
     };
   }, []);
 
@@ -488,6 +491,8 @@ export default function RewardsPage() {
         return nextState;
       });
     }
+
+    window.setTimeout(() => void backupMotiveState(), 0);
   }
 
   return (

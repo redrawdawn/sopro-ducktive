@@ -539,7 +539,7 @@ export function DailyDashboard() {
     }
 
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(dailyState));
-    scheduleMotiveBackup();
+    void backupMotiveState();
   }, [dailyState, storageReady]);
 
   useEffect(() => {
@@ -548,7 +548,7 @@ export function DailyDashboard() {
     }
 
     window.localStorage.setItem(CYCLE_STORAGE_KEY, JSON.stringify(cycleState));
-    scheduleMotiveBackup();
+    void backupMotiveState();
   }, [cycleState, storageReady]);
 
   useEffect(() => {
@@ -557,26 +557,10 @@ export function DailyDashboard() {
   }, []);
 
   useEffect(() => {
-    async function refreshFromCloud() {
-      const restored = await restoreMotiveStateFromBackup();
-
-      if (restored) {
-        applyLocalStateToView();
-      }
-    }
-
-    function handleVisibilityChange() {
-      if (document.visibilityState === "visible") {
-        void refreshFromCloud();
-      }
-    }
-
-    window.addEventListener("focus", refreshFromCloud);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("motive-account-state-change", applyLocalStateToView);
 
     return () => {
-      window.removeEventListener("focus", refreshFromCloud);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("motive-account-state-change", applyLocalStateToView);
     };
   }, []);
 
