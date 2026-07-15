@@ -14,7 +14,13 @@ export async function DELETE() {
   const serviceRoleKey = getSupabaseServiceRoleKey();
 
   if (!serviceRoleKey) {
-    return NextResponse.json({ error: "Account deletion is not configured." }, { status: 500 });
+    const { error: rpcError } = await supabase.rpc("delete_current_user");
+
+    if (rpcError) {
+      return NextResponse.json({ error: rpcError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ ok: true });
   }
 
   const admin = createAdminClient(getSupabaseUrl(), serviceRoleKey, {

@@ -10,5 +10,5 @@ export function getSupabasePublishableKey() {
 }
 
 export function getSupabaseServiceRoleKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  return process.env.SUPABASE_SERVICE_ROLE_KEY;
 }
