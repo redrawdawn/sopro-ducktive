@@ -9,6 +9,14 @@ import { Button } from "@/components/ui/button";
 import { XpProgressBar } from "@/components/xp-progress-bar";
 import { backupMotiveState } from "@/lib/motive-backup";
 import {
+  getPendingRewardIds,
+  getRewardTagStreaks,
+  isRewardClaimEligible,
+  loadClaimedRewardsFromStorage,
+  saveClaimedRewardsToStorage,
+  type RewardDailyState
+} from "@/lib/reward-state";
+import {
   avatarDefaultAccessoryColor,
   avatarImagePath,
   avatarLayerOrder,
@@ -45,7 +53,7 @@ type DailyState = {
   completedTaskIds: string[];
   completionDatesByTask: Record<string, string[]>;
   totalXp: number;
-};
+} & RewardDailyState;
 type RewardPreview = {
   title: string;
   config: AvatarConfig;
@@ -72,8 +80,6 @@ type MedalSet = {
   Icon: typeof Footprints;
   tiers: MedalTier[];
 };
-
-const CLAIMED_REWARDS_KEY = "sopro-ducktive-claimed-rewards-v1";
 
 const rewardRows: RewardRow[] = [
   { id: "daily-all", name: "Complete all your daily tasks", reward: "5 XP", xp: 5 },
@@ -202,101 +208,6 @@ function loadDailyState(): DailyState {
   }
 }
 
-function loadClaimedRewards() {
-  if (typeof window === "undefined") {
-    return new Set<string>();
-  }
-
-  try {
-    const saved = JSON.parse(window.localStorage.getItem(CLAIMED_REWARDS_KEY) ?? "[]") as unknown;
-    return new Set(Array.isArray(saved) ? saved.filter((id): id is string => typeof id === "string") : []);
-  } catch {
-    return new Set<string>();
-  }
-}
-
-function saveClaimedRewards(claimed: Set<string>) {
-  window.localStorage.setItem(CLAIMED_REWARDS_KEY, JSON.stringify(Array.from(claimed)));
-}
-
-function daysBetween(startDateKey: string, endDateKey: string) {
-  const start = new Date(`${startDateKey}T00:00:00`);
-  const end = new Date(`${endDateKey}T00:00:00`);
-  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
-}
-
-function getLongestStreak(completionDates: string[] = []) {
-  const sortedDates = Array.from(new Set(completionDates)).sort();
-  let longest = 0;
-  let current = 0;
-  let previousDate: string | null = null;
-
-  for (const date of sortedDates) {
-    current = previousDate && daysBetween(previousDate, date) === 1 ? current + 1 : 1;
-    longest = Math.max(longest, current);
-    previousDate = date;
-  }
-
-  return longest;
-}
-
-function getTagStreaks(state: DailyState) {
-  return state.tasks.reduce<Record<string, number>>((streaks, task) => {
-    if (!task.icon) {
-      return streaks;
-    }
-
-    const taskStreak = getLongestStreak(state.completionDatesByTask[task.id]);
-    streaks[task.icon] = Math.max(streaks[task.icon] ?? 0, taskStreak);
-    return streaks;
-  }, {});
-}
-
-function getTagTotals(state: DailyState) {
-  return state.tasks.reduce<Record<string, number>>((totals, task) => {
-    if (!task.icon) {
-      return totals;
-    }
-
-    totals[task.icon] = (totals[task.icon] ?? 0) + (state.completionDatesByTask[task.id]?.length ?? 0);
-    return totals;
-  }, {});
-}
-
-function getRewardEligible(reward: RewardRow, state: DailyState, tagStreaks: Record<string, number>, tagTotals: Record<string, number>) {
-  const bestStreak = Math.max(0, ...Object.values(tagStreaks));
-
-  if (reward.id === "daily-all") {
-    return state.tasks.length > 0 && state.completedTaskIds.length >= state.tasks.length;
-  }
-
-  if (reward.id === "streak-7") {
-    return bestStreak >= 7;
-  }
-
-  if (reward.id === "streak-30") {
-    return bestStreak >= 30;
-  }
-
-  if (reward.id === "sleep-30-total") {
-    return (tagTotals.sleep ?? 0) >= 30;
-  }
-
-  if (reward.id === "run-40-total") {
-    return (tagTotals.run ?? 0) >= 40;
-  }
-
-  if (reward.id === "workout-run-7") {
-    return (tagStreaks.workout ?? 0) >= 7 && (tagStreaks.run ?? 0) >= 7;
-  }
-
-  if (reward.id === "five-daily-7") {
-    return state.tasks.filter((task) => getLongestStreak(state.completionDatesByTask[task.id]) >= 7).length >= 5;
-  }
-
-  return false;
-}
-
 function rewardLayerTransform(category: AvatarCategory, partName: string) {
   if (category === "Legs") {
     return legsAtOriginalHeight.has(partName)
@@ -371,8 +282,7 @@ export default function RewardsPage() {
   const levelRewardsScrollRef = useRef<HTMLDivElement | null>(null);
   const currentLevelRewardRef = useRef<HTMLButtonElement | null>(null);
   const level = useMemo(() => getLevelSnapshot(dailyState.totalXp), [dailyState.totalXp]);
-  const tagStreaks = useMemo(() => getTagStreaks(dailyState), [dailyState]);
-  const tagTotals = useMemo(() => getTagTotals(dailyState), [dailyState]);
+  const tagStreaks = useMemo(() => getRewardTagStreaks(dailyState), [dailyState]);
   const currentRewardIndex = useMemo(() => {
     const nextIndex = levelRewards.findIndex((reward) => reward.level > level.level);
     return nextIndex === -1 ? levelRewards.length - 1 : nextIndex;
@@ -390,25 +300,17 @@ export default function RewardsPage() {
   const pendingRewardIds = useMemo(
     () =>
       rewardRows
-        .filter((reward) => getRewardEligible(reward, dailyState, tagStreaks, tagTotals) && !claimedRewards.has(`reward:${reward.id}`))
+        .filter((reward) => isRewardClaimEligible(`reward:${reward.id}`, dailyState) && !claimedRewards.has(`reward:${reward.id}`))
         .map((reward) => `reward:${reward.id}`),
-    [claimedRewards, dailyState, tagStreaks, tagTotals]
+    [claimedRewards, dailyState]
   );
   const pendingLevelRewardIds = useMemo(
-    () =>
-      levelRewards
-        .filter((reward) => level.level >= reward.level && !claimedRewards.has(`level:${reward.level}`))
-        .map((reward) => `level:${reward.level}`),
-    [claimedRewards, level.level]
+    () => getPendingRewardIds(dailyState, claimedRewards).filter((id) => id.startsWith("level:")),
+    [claimedRewards, dailyState]
   );
   const pendingMedalRewardIds = useMemo(
-    () =>
-      medalSets.flatMap((set) =>
-        set.tiers
-          .filter((tier) => (tagStreaks[set.id] ?? 0) >= tier.days && !claimedRewards.has(`medal:${set.id}:${tier.tier}`))
-          .map((tier) => `medal:${set.id}:${tier.tier}`)
-      ),
-    [claimedRewards, tagStreaks]
+    () => getPendingRewardIds(dailyState, claimedRewards).filter((id) => id.startsWith("medal:")),
+    [claimedRewards, dailyState]
   );
   const sortedMedalSets = useMemo(
     () =>
@@ -422,10 +324,11 @@ export default function RewardsPage() {
 
   useEffect(() => {
     setDailyState(loadDailyState());
-    setClaimedRewards(loadClaimedRewards());
+    setClaimedRewards(loadClaimedRewardsFromStorage());
 
     function syncState() {
       setDailyState(loadDailyState());
+      setClaimedRewards(loadClaimedRewardsFromStorage());
     }
 
     window.addEventListener("storage", syncState);
@@ -478,7 +381,7 @@ export default function RewardsPage() {
     const nextClaimed = new Set(claimedRewards);
     nextClaimed.add(id);
     setClaimedRewards(nextClaimed);
-    saveClaimedRewards(nextClaimed);
+    saveClaimedRewardsToStorage(nextClaimed);
     window.dispatchEvent(new Event("motive-rewards-claimed-change"));
     setClaimBursts((current) => [...current, id]);
     window.setTimeout(() => setClaimBursts((current) => current.filter((burstId) => burstId !== id)), 720);
@@ -527,7 +430,7 @@ export default function RewardsPage() {
               ? { title: reward.name, config: createRewardConfig(reward.cosmetic) }
               : null;
             const rewardId = `reward:${reward.id}`;
-            const pending = getRewardEligible(reward, dailyState, tagStreaks, tagTotals) && !claimedRewards.has(rewardId);
+            const pending = isRewardClaimEligible(rewardId, dailyState) && !claimedRewards.has(rewardId);
 
             return (
             <button

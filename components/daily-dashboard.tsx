@@ -42,6 +42,11 @@ import { getLevelSnapshot } from "@/lib/levels";
 import { AVATAR_ADMIN_UNLOCK_KEY } from "@/lib/avatar";
 import { backupMotiveState, clearMotiveLocalState, restoreMotiveStateFromBackup, scheduleMotiveBackup } from "@/lib/motive-backup";
 import {
+  loadClaimedRewardsFromStorage,
+  reconcileClaimedRewards,
+  saveClaimedRewardsToStorage
+} from "@/lib/reward-state";
+import {
   getStoredPublicDisplayName,
   isPublicProfileEnabled,
   savePublicDisplayName,
@@ -538,6 +543,15 @@ export function DailyDashboard() {
       return;
     }
 
+    const reconciled = reconcileClaimedRewards(dailyState, loadClaimedRewardsFromStorage());
+
+    if (reconciled.changed) {
+      saveClaimedRewardsToStorage(reconciled.claimed);
+      setDailyState(reconciled.state);
+      window.dispatchEvent(new Event("motive-rewards-claimed-change"));
+      return;
+    }
+
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(dailyState));
     void backupMotiveState();
   }, [dailyState, storageReady]);
@@ -555,6 +569,14 @@ export function DailyDashboard() {
     const interval = window.setInterval(() => setNow(new Date()), 60000);
     return () => window.clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (!storageReady || dailyState.completedDate === todayKey()) {
+      return;
+    }
+
+    setDailyState(loadState());
+  }, [dailyState.completedDate, now, storageReady]);
 
   useEffect(() => {
     window.addEventListener("motive-account-state-change", applyLocalStateToView);
