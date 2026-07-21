@@ -162,30 +162,14 @@ export function getPendingRewardIds(state: RewardDailyState, claimed: Set<string
 }
 
 export function reconcileClaimedRewards<TState extends RewardDailyState>(state: TState, claimed: Set<string>) {
-  const nextClaimed = new Set(claimed);
-  let nextState = { ...state, totalXp: Math.max(0, Number(state.totalXp) || 0) };
-  let changed = false;
-  let removed = true;
-
-  while (removed) {
-    removed = false;
-
-    for (const id of Array.from(nextClaimed)) {
-      if (isRewardClaimEligible(id, nextState)) {
-        continue;
-      }
-
-      nextClaimed.delete(id);
-      nextState = {
-        ...nextState,
-        totalXp: Math.max(0, (Number(nextState.totalXp) || 0) - getClaimedRewardXp(id))
-      };
-      changed = true;
-      removed = true;
-    }
-  }
-
-  return { state: nextState as TState, claimed: nextClaimed, changed };
+  // Claimed achievements are permanent. Their original eligibility can be
+  // temporary (for example, completing every daily task), but once claimed
+  // they must remain unlocked on future days.
+  return {
+    state: { ...state, totalXp: Math.max(0, Number(state.totalXp) || 0) } as TState,
+    claimed: new Set(claimed),
+    changed: false
+  };
 }
 
 export function loadClaimedRewardsFromStorage() {

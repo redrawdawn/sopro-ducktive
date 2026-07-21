@@ -58,6 +58,7 @@ import { AvatarCharacter } from "@/components/avatar-character";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { XpProgressBar } from "@/components/xp-progress-bar";
+import { APP_VERSION } from "@/lib/version";
 
 type DailyTask = {
   id: string;
@@ -187,8 +188,12 @@ function inferTaskIcon(title: string) {
   return iconRules.find((rule) => rule.words.some((word) => normalized.includes(word)))?.icon;
 }
 
+function localDateKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateKey();
 }
 
 function getWeekKey(date = new Date()) {
@@ -212,7 +217,7 @@ function getPeriodKey(tab: CycleTab, date = new Date()) {
 function addDays(dateKey: string, amount: number) {
   const date = new Date(`${dateKey}T00:00:00`);
   date.setDate(date.getDate() + amount);
-  return date.toISOString().slice(0, 10);
+  return localDateKey(date);
 }
 
 function daysBetween(startDateKey: string, endDateKey: string) {
@@ -1581,6 +1586,7 @@ export function DailyDashboard() {
             <Button type="button" variant="outline" className="w-full" onClick={() => setLogoutConfirmOpen(true)} disabled={logoutLoading}>
               {logoutLoading ? "Logging out..." : "Log out"}
             </Button>
+            <div className="text-center text-xs font-bold text-muted-foreground">Version {APP_VERSION}</div>
             </div>
           </div>
         </div>

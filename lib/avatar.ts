@@ -1,6 +1,7 @@
 export const AVATAR_CONFIG_KEY = "sopro-ducktive-avatar-config-v1";
 export const AVATAR_PAUSED_KEY = "sopro-ducktive-avatar-paused";
 export const AVATAR_ADMIN_UNLOCK_KEY = "sopro-ducktive-admin-unlocked";
+const CLAIMED_REWARDS_KEY = "sopro-ducktive-claimed-rewards-v1";
 
 export type AvatarCategory = "Body" | "Legs" | "Arms" | "Face" | "Beard" | "Hair" | "Hat" | "Detail";
 export type AvatarEditorTab = "Background" | AvatarCategory;
@@ -109,6 +110,29 @@ const avatarUnlockHints: Record<string, string> = {
   ...Object.fromEntries(avatarLevelRewards.map((reward) => [reward.part, `unlocks at level ${reward.level}`]))
 };
 
+const avatarPartRewardIds: Record<string, string> = {
+  "hair-wild.png": "reward:sleep-30-total",
+  "hat-band.png": "reward:run-40-total",
+  "hat-ninja.png": "reward:workout-run-7",
+  "hat-military.png": "reward:five-daily-7",
+  "legs-insect.png": "medal:run:Bronze",
+  "legs-four.png": "medal:run:Silver",
+  "legs-spider.png": "medal:run:Gold",
+  "arms-noodle.png": "medal:workout:Bronze",
+  "arms-fingers.png": "medal:workout:Silver",
+  "arms-large.png": "medal:workout:Gold",
+  "face-sleep.png": "medal:sleep:Bronze",
+  "face-grumpy.png": "medal:sleep:Silver",
+  "face-monster.png": "medal:sleep:Gold",
+  "face-glasses.png": "medal:book:Bronze",
+  "face-specs.png": "medal:book:Silver",
+  "face-threeeyes.png": "medal:book:Gold",
+  "hat-arrow.png": "medal:mind:Bronze",
+  "hat-bowl.png": "medal:mind:Silver",
+  "hat-wizard.png": "medal:mind:Gold",
+  ...Object.fromEntries(avatarLevelRewards.map((reward) => [reward.part, `level:${reward.level}`]))
+};
+
 export const defaultAvatarConfig: AvatarConfig = {
   parts: {
     Body: "body-default.png",
@@ -194,7 +218,21 @@ export function avatarLabel(name: string) {
 }
 
 export function isAvatarPartUnlocked(category: AvatarCategory, name: string, adminUnlocked = false) {
-  return adminUnlocked || defaultUnlockedAvatarParts[category].includes(name);
+  if (adminUnlocked || defaultUnlockedAvatarParts[category].includes(name)) {
+    return true;
+  }
+
+  const rewardId = avatarPartRewardIds[name];
+  if (!rewardId || typeof window === "undefined") {
+    return false;
+  }
+
+  try {
+    const claimed = JSON.parse(window.localStorage.getItem(CLAIMED_REWARDS_KEY) ?? "[]") as unknown;
+    return Array.isArray(claimed) && claimed.includes(rewardId);
+  } catch {
+    return false;
+  }
 }
 
 export function avatarUnlockHint(name: string) {

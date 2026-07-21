@@ -44,6 +44,7 @@ const rewardLayerTransforms = {
 const legsAtOriginalHeight = new Set(["legs-default.png", "legs-blob.png", "legs-ghost.png", "legs-thin.png"]);
 
 type RewardsTab = "rewards" | "levels" | "medals";
+type AchievementStatus = "claimable" | "locked" | "unlocked";
 type DailyTask = {
   id: string;
   icon?: string;
@@ -143,6 +144,24 @@ const medalSets: MedalSet[] = [
     ]
   }
 ];
+
+const achievementStatusOrder: Record<AchievementStatus, number> = {
+  claimable: 0,
+  locked: 1,
+  unlocked: 2
+};
+
+function getAchievementStatus(id: string, state: DailyState, claimed: Set<string>): AchievementStatus {
+  if (claimed.has(id)) {
+    return "unlocked";
+  }
+
+  return isRewardClaimEligible(id, state) ? "claimable" : "locked";
+}
+
+function statusLabel(status: AchievementStatus) {
+  return status[0].toUpperCase() + status.slice(1);
+}
 
 const levelRewards: LevelReward[] = Array.from({ length: 100 }, (_, index) => {
   const level = (index + 1) * 5;
@@ -287,7 +306,16 @@ export default function RewardsPage() {
     const nextIndex = levelRewards.findIndex((reward) => reward.level > level.level);
     return nextIndex === -1 ? levelRewards.length - 1 : nextIndex;
   }, [level.level]);
-  const visibleLevelRewards = levelRewards.slice(0, visibleLevelRewardCount);
+  const sortedLevelRewards = useMemo(
+    () =>
+      [...levelRewards].sort((first, second) => {
+        const firstStatus = getAchievementStatus(`level:${first.level}`, dailyState, claimedRewards);
+        const secondStatus = getAchievementStatus(`level:${second.level}`, dailyState, claimedRewards);
+        return achievementStatusOrder[firstStatus] - achievementStatusOrder[secondStatus] || first.level - second.level;
+      }),
+    [claimedRewards, dailyState]
+  );
+  const visibleLevelRewards = sortedLevelRewards.slice(0, visibleLevelRewardCount);
   const timelineProgressPercent = useMemo(() => {
     const firstRewardLevel = levelRewards[0].level;
     const lastVisibleLevel = visibleLevelRewards[visibleLevelRewards.length - 1]?.level ?? firstRewardLevel;
@@ -296,7 +324,16 @@ export default function RewardsPage() {
 
     return Math.min(100, Math.max(0, ((effectiveLevel - firstRewardLevel) / range) * 100));
   }, [level.level, level.progressPercent, visibleLevelRewards]);
-  const visibleRewardRows = rewardRows.slice(0, visibleRewardCount);
+  const sortedRewardRows = useMemo(
+    () =>
+      [...rewardRows].sort((first, second) => {
+        const firstStatus = getAchievementStatus(`reward:${first.id}`, dailyState, claimedRewards);
+        const secondStatus = getAchievementStatus(`reward:${second.id}`, dailyState, claimedRewards);
+        return achievementStatusOrder[firstStatus] - achievementStatusOrder[secondStatus];
+      }),
+    [claimedRewards, dailyState]
+  );
+  const visibleRewardRows = sortedRewardRows.slice(0, visibleRewardCount);
   const pendingRewardIds = useMemo(
     () =>
       rewardRows
@@ -315,11 +352,16 @@ export default function RewardsPage() {
   const sortedMedalSets = useMemo(
     () =>
       [...medalSets].sort((first, second) => {
+        const firstStatus = Math.min(...first.tiers.map((tier) => achievementStatusOrder[getAchievementStatus(`medal:${first.id}:${tier.tier}`, dailyState, claimedRewards)]));
+        const secondStatus = Math.min(...second.tiers.map((tier) => achievementStatusOrder[getAchievementStatus(`medal:${second.id}:${tier.tier}`, dailyState, claimedRewards)]));
+        if (firstStatus !== secondStatus) {
+          return firstStatus - secondStatus;
+        }
         const firstProgress = Math.max(...first.tiers.map((tier) => Math.min(1, (tagStreaks[first.id] ?? 0) / tier.days)));
         const secondProgress = Math.max(...second.tiers.map((tier) => Math.min(1, (tagStreaks[second.id] ?? 0) / tier.days)));
         return secondProgress - firstProgress;
       }),
-    [tagStreaks]
+    [claimedRewards, dailyState, tagStreaks]
   );
 
   useEffect(() => {
@@ -374,7 +416,7 @@ export default function RewardsPage() {
   }
 
   function claimReward(id: string, xp = 0) {
-    if (claimedRewards.has(id)) {
+    if (getAchievementStatus(id, dailyState, claimedRewards) !== "claimable") {
       return;
     }
 
@@ -430,7 +472,8 @@ export default function RewardsPage() {
               ? { title: reward.name, config: createRewardConfig(reward.cosmetic) }
               : null;
             const rewardId = `reward:${reward.id}`;
-            const pending = isRewardClaimEligible(rewardId, dailyState) && !claimedRewards.has(rewardId);
+            const status = getAchievementStatus(rewardId, dailyState, claimedRewards);
+            const pending = status === "claimable";
 
             return (
             <button
@@ -445,7 +488,10 @@ export default function RewardsPage() {
                 <Trophy className="h-5 w-5" />
               </div>
               <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                <h2 className="min-w-0 break-words font-black">{reward.name}</h2>
+                <div className="min-w-0">
+                  <h2 className="break-words font-black">{reward.name}</h2>
+                  <div className={pending ? "mt-1 text-xs font-black text-secondary" : "mt-1 text-xs font-bold text-muted-foreground"}>{statusLabel(status)}</div>
+                </div>
                 {preview ? (
                   <span
                     onClick={(event) => {
@@ -497,12 +543,13 @@ export default function RewardsPage() {
               className="absolute left-3 top-8 w-1 rounded-full bg-gradient-to-b from-secondary to-orange-500 transition-all duration-500 ease-out"
               style={{ height: `calc((100% - 4rem) * ${timelineProgressPercent / 100})` }}
             />
-            {visibleLevelRewards.map((reward, index) => {
+            {visibleLevelRewards.map((reward) => {
               const earned = level.level >= reward.level;
-              const current = index === currentRewardIndex;
-              const StatusIcon = earned ? LockOpen : Lock;
+              const current = reward.level === levelRewards[currentRewardIndex]?.level;
               const rewardId = `level:${reward.level}`;
-              const pending = earned && !claimedRewards.has(rewardId);
+              const status = getAchievementStatus(rewardId, dailyState, claimedRewards);
+              const pending = status === "claimable";
+              const StatusIcon = status === "locked" ? Lock : LockOpen;
 
               return (
             <button
@@ -520,6 +567,7 @@ export default function RewardsPage() {
                   <StatusIcon className={earned ? "h-4 w-4 shrink-0 text-accent" : "h-4 w-4 shrink-0 text-muted-foreground"} />
                   {reward.title}
                 </h2>
+                <div className={pending ? "mt-1 text-xs font-black text-secondary" : "mt-1 text-xs font-bold text-muted-foreground"}>{statusLabel(status)}</div>
               </div>
               <span
                 onClick={(event) => {
@@ -560,12 +608,17 @@ export default function RewardsPage() {
             return (
               <div key={set.id} className="neon-card rounded-3xl p-4">
                 <div className="space-y-2">
-                  {set.tiers.map((tier) => {
+                  {[...set.tiers].sort((first, second) => {
+                    const firstStatus = getAchievementStatus(`medal:${set.id}:${first.tier}`, dailyState, claimedRewards);
+                    const secondStatus = getAchievementStatus(`medal:${set.id}:${second.tier}`, dailyState, claimedRewards);
+                    return achievementStatusOrder[firstStatus] - achievementStatusOrder[secondStatus] || first.days - second.days;
+                  }).map((tier) => {
                     const complete = streak >= tier.days;
                     const expanded = tier.tier === activeTier.tier;
                     const progress = Math.min(100, (streak / tier.days) * 100);
                     const rewardId = `medal:${set.id}:${tier.tier}`;
-                    const pending = complete && !claimedRewards.has(rewardId);
+                    const status = getAchievementStatus(rewardId, dailyState, claimedRewards);
+                    const pending = status === "claimable";
                     const preview = {
                       title: `${set.label} ${tier.tier}`,
                       config: createRewardConfig(tier.reward)
@@ -602,7 +655,7 @@ export default function RewardsPage() {
                               />
                             </div>
                             <p className={expanded ? "mt-2 text-xs font-bold text-muted-foreground" : "mt-1 text-[10px] font-bold text-muted-foreground"}>
-                              {streak}/{tier.days}
+                              {statusLabel(status)} · {streak}/{tier.days}
                             </p>
                           </div>
                           <span
