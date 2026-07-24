@@ -18,10 +18,12 @@ import {
   Footprints,
   GraduationCap,
   Hammer,
+  HandHeart,
   Heart,
   Home,
   Laptop,
   Leaf,
+  LoaderCircle,
   Moon,
   Music,
   Pencil,
@@ -115,6 +117,8 @@ const taskTabs: Array<{ id: TaskTab; label: string }> = [
 
 const taskIcons = [
   { id: "book", label: "Book", icon: BookOpen },
+  { id: "write", label: "Write", icon: Pencil },
+  { id: "pray", label: "Pray", icon: HandHeart },
   { id: "workout", label: "Workout", icon: Dumbbell },
   { id: "run", label: "Run", icon: Footprints },
   { id: "food", label: "Food", icon: Utensils },
@@ -143,6 +147,18 @@ const taskIcons = [
   { id: "laundry", label: "Laundry", icon: WashingMachine }
 ];
 
+const suggestedTasks = [
+  { title: "Workout", icon: Dumbbell },
+  { title: "Run", icon: Footprints },
+  { title: "Walk", icon: Footprints },
+  { title: "Garden", icon: Leaf },
+  { title: "Read", icon: BookOpen },
+  { title: "Write", icon: Pencil },
+  { title: "Pray", icon: HandHeart },
+  { title: "Clean", icon: Sparkles },
+  { title: "Wake up", icon: Sun }
+];
+
 function getTaskIcon(iconId?: string) {
   return taskIcons.find((icon) => icon.id === iconId);
 }
@@ -165,7 +181,9 @@ function getTaskTagLabel(iconId?: string) {
 function inferTaskIcon(title: string) {
   const normalized = title.toLowerCase();
   const iconRules = [
-    { icon: "mind", words: ["study", "meditate", "meditation", "prayer"] },
+    { icon: "pray", words: ["pray", "prayer"] },
+    { icon: "write", words: ["write", "writing", "journal"] },
+    { icon: "mind", words: ["study", "meditate", "meditation"] },
     { icon: "book", words: ["read", "bible", "book", "chapter", "devotional"] },
     { icon: "run", words: ["run", "jog", "sprint", "walk", "cardio"] },
     { icon: "workout", words: ["workout", "exercise", "gym", "lift", "arms", "legs", "chest"] },
@@ -458,6 +476,7 @@ export function DailyDashboard() {
     totalXp: 0
   });
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const newTaskInputRef = useRef<HTMLInputElement>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [cycleState, setCycleState] = useState<CycleTaskState>(() => createCycleFallback());
   const [cyclePendingTitle, setCyclePendingTitle] = useState<string | null>(null);
@@ -481,6 +500,9 @@ export function DailyDashboard() {
   const [deleteAccountLoading, setDeleteAccountLoading] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   const [publicProfileEnabled, setPublicProfileEnabledState] = useState(false);
+  const [publicNamePromptOpen, setPublicNamePromptOpen] = useState(false);
+  const [publicNamePromptValue, setPublicNamePromptValue] = useState("");
+  const [publicNamePromptError, setPublicNamePromptError] = useState<string | null>(null);
   const [accountEmail, setAccountEmail] = useState("");
   const [profileDisplayName, setProfileDisplayName] = useState("");
   const [profileNameSaved, setProfileNameSaved] = useState(false);
@@ -531,13 +553,15 @@ export function DailyDashboard() {
 
   useEffect(() => {
     async function loadLocalAndCloudState() {
-      await restoreMotiveStateFromBackup({ preferCloud: true });
-      const supabase = createClient();
-      const { data } = await supabase.auth.getUser();
-
-      applyLocalStateToView();
-      setAccountEmail(data.user?.email ?? "");
-      setStorageReady(true);
+      try {
+        await restoreMotiveStateFromBackup({ preferCloud: true });
+        const supabase = createClient();
+        const { data } = await supabase.auth.getUser();
+        setAccountEmail(data.user?.email ?? "");
+      } finally {
+        applyLocalStateToView();
+        setStorageReady(true);
+      }
     }
 
     void loadLocalAndCloudState();
@@ -661,9 +685,34 @@ export function DailyDashboard() {
   }
 
   async function togglePublicProfileSetting() {
-    const next = !publicProfileEnabled;
-    setPublicProfileEnabledState(next);
-    setPublicProfileEnabled(next);
+    if (!publicProfileEnabled) {
+      setPublicNamePromptValue(profileDisplayName);
+      setPublicNamePromptError(null);
+      setPublicNamePromptOpen(true);
+      return;
+    }
+
+    setPublicProfileEnabledState(false);
+    setPublicProfileEnabled(false);
+    await syncCurrentPublicProfile();
+    scheduleMotiveBackup(250);
+  }
+
+  async function makeProfilePublic(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const firstName = publicNamePromptValue.trim();
+
+    if (!firstName) {
+      setPublicNamePromptError("Enter your first name to make your account public.");
+      return;
+    }
+
+    savePublicDisplayName(firstName);
+    setProfileDisplayName(getStoredPublicDisplayName());
+    setPublicProfileEnabledState(true);
+    setPublicProfileEnabled(true);
+    setPublicNamePromptOpen(false);
+    setPublicNamePromptError(null);
     await syncCurrentPublicProfile();
     scheduleMotiveBackup(250);
   }
@@ -1069,6 +1118,21 @@ export function DailyDashboard() {
     }
   }
 
+  if (!storageReady) {
+    return (
+      <div className="fixed inset-0 z-[100] flex min-h-screen flex-col items-center justify-center gap-4 bg-background text-foreground">
+        <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl border border-primary/30 bg-card shadow-2xl shadow-primary/20">
+          <LoaderCircle className="h-9 w-9 animate-spin text-primary" aria-hidden="true" />
+        </div>
+        <div className="text-center">
+          <div className="text-lg font-black">Loading Motive</div>
+          <div className="mt-1 text-xs font-semibold text-muted-foreground">Getting your tasks ready...</div>
+        </div>
+        <span className="sr-only" role="status">Loading your Motive data</span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-[calc(100vh-8rem)] flex-col gap-5">
       <section className="level-summary-card rounded-3xl border border-primary/35 bg-gradient-to-br from-primary/35 via-purple-950 to-card p-5 shadow-2xl shadow-primary/20">
@@ -1442,8 +1506,39 @@ export function DailyDashboard() {
                 {activeAddWarning}
               </p>
             ) : null}
+            <div className="mb-3">
+              <div className="mb-2 text-xs font-black uppercase tracking-[0.16em] text-muted-foreground">
+                Suggestions
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {suggestedTasks.map((suggestion) => {
+                  const SuggestionIcon = suggestion.icon;
+
+                  return (
+                    <button
+                      key={suggestion.title}
+                      type="button"
+                      onClick={() => {
+                        setNewTaskTitle(suggestion.title);
+                        window.requestAnimationFrame(() => {
+                          const input = newTaskInputRef.current;
+                          input?.focus();
+                          input?.setSelectionRange(input.value.length, input.value.length);
+                        });
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-muted px-3 py-2 text-xs font-bold text-foreground outline-none transition-colors hover:bg-muted/80 focus-visible:ring-2 focus-visible:ring-primary"
+                      aria-label={`Use ${suggestion.title} as the task title`}
+                    >
+                      <SuggestionIcon className="h-4 w-4 text-primary" aria-hidden="true" />
+                      <span>{suggestion.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div className="flex gap-2">
               <Input
+                ref={newTaskInputRef}
                 value={newTaskTitle}
                 onChange={(event) => setNewTaskTitle(event.target.value)}
                 placeholder={activeCycleTab ? `${activeCycleLabel} task title` : "Task title"}
@@ -1589,6 +1684,50 @@ export function DailyDashboard() {
             <div className="text-center text-xs font-bold text-muted-foreground">Version {APP_VERSION}</div>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {publicNamePromptOpen ? (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 px-5 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setPublicNamePromptOpen(false)}
+        >
+          <form
+            onSubmit={makeProfilePublic}
+            className="neon-card w-full max-w-sm rounded-3xl p-5 animate-in fade-in zoom-in-95 duration-200"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-1 text-xl font-black">Make your account public</div>
+            <p className="mb-4 text-sm font-semibold text-muted-foreground">
+              Enter your first name so people know who they found.
+            </p>
+            <label className="text-xs font-black uppercase tracking-[0.16em] text-muted-foreground" htmlFor="public-first-name">
+              First name
+            </label>
+            <Input
+              id="public-first-name"
+              value={publicNamePromptValue}
+              onChange={(event) => {
+                setPublicNamePromptValue(event.target.value);
+                setPublicNamePromptError(null);
+              }}
+              autoFocus
+              required
+              maxLength={24}
+              autoComplete="given-name"
+              placeholder="First name"
+              className="mt-2 border-0 bg-background"
+            />
+            {publicNamePromptError ? (
+              <p className="mt-2 text-xs font-bold text-destructive">{publicNamePromptError}</p>
+            ) : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setPublicNamePromptOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit">Make public</Button>
+            </div>
+          </form>
         </div>
       ) : null}
 
