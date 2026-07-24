@@ -23,7 +23,6 @@ import {
   Home,
   Laptop,
   Leaf,
-  LoaderCircle,
   Moon,
   Music,
   Pencil,
@@ -156,7 +155,7 @@ const suggestedTasks = [
   { title: "Write", icon: Pencil },
   { title: "Pray", icon: HandHeart },
   { title: "Clean", icon: Sparkles },
-  { title: "Wake up", icon: Sun }
+  { title: "Wake up early", icon: Bed }
 ];
 
 function getTaskIcon(iconId?: string) {
@@ -1116,21 +1115,6 @@ export function DailyDashboard() {
       setEditTitle("");
       setEditSubtaskTitles({});
     }
-  }
-
-  if (!storageReady) {
-    return (
-      <div className="fixed inset-0 z-[100] flex min-h-screen flex-col items-center justify-center gap-4 bg-background text-foreground">
-        <div className="relative flex h-20 w-20 items-center justify-center rounded-3xl border border-primary/30 bg-card shadow-2xl shadow-primary/20">
-          <LoaderCircle className="h-9 w-9 animate-spin text-primary" aria-hidden="true" />
-        </div>
-        <div className="text-center">
-          <div className="text-lg font-black">Loading Motive</div>
-          <div className="mt-1 text-xs font-semibold text-muted-foreground">Getting your tasks ready...</div>
-        </div>
-        <span className="sr-only" role="status">Loading your Motive data</span>
-      </div>
-    );
   }
 
   return (
