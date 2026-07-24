@@ -134,6 +134,7 @@ export function AvatarEditor({ onClose }: AvatarEditorProps) {
     saveAvatarConfig(draft);
     void backupMotiveState();
     setSaved(true);
+    onClose?.();
   }
 
   const frame = previewPaused ? 0 : frameSequence[frameIndex];

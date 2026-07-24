@@ -160,7 +160,11 @@ function getAchievementStatus(id: string, state: DailyState, claimed: Set<string
 }
 
 function statusLabel(status: AchievementStatus) {
-  return status[0].toUpperCase() + status.slice(1);
+  if (status === "claimable") {
+    return "Claim";
+  }
+
+  return status === "unlocked" ? "Claimed" : "";
 }
 
 const levelRewards: LevelReward[] = Array.from({ length: 100 }, (_, index) => {
@@ -490,7 +494,9 @@ export default function RewardsPage() {
               <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="break-words font-black">{reward.name}</h2>
-                  <div className={pending ? "mt-1 text-xs font-black text-secondary" : "mt-1 text-xs font-bold text-muted-foreground"}>{statusLabel(status)}</div>
+                  {statusLabel(status) ? (
+                    <div className={pending ? "mt-1 text-xs font-black text-secondary" : "mt-1 text-xs font-bold text-muted-foreground"}>{statusLabel(status)}</div>
+                  ) : null}
                 </div>
                 {preview ? (
                   <span
@@ -567,7 +573,9 @@ export default function RewardsPage() {
                   <StatusIcon className={earned ? "h-4 w-4 shrink-0 text-accent" : "h-4 w-4 shrink-0 text-muted-foreground"} />
                   {reward.title}
                 </h2>
-                <div className={pending ? "mt-1 text-xs font-black text-secondary" : "mt-1 text-xs font-bold text-muted-foreground"}>{statusLabel(status)}</div>
+                {statusLabel(status) ? (
+                  <div className={pending ? "mt-1 text-xs font-black text-secondary" : "mt-1 text-xs font-bold text-muted-foreground"}>{statusLabel(status)}</div>
+                ) : null}
               </div>
               <span
                 onClick={(event) => {
@@ -655,7 +663,7 @@ export default function RewardsPage() {
                               />
                             </div>
                             <p className={expanded ? "mt-2 text-xs font-bold text-muted-foreground" : "mt-1 text-[10px] font-bold text-muted-foreground"}>
-                              {statusLabel(status)} · {streak}/{tier.days}
+                              {statusLabel(status) ? `${statusLabel(status)} · ` : ""}{streak}/{tier.days}
                             </p>
                           </div>
                           <span
