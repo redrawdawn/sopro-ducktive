@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Trophy, UserRound } from "lucide-react";
-import { getPendingRewardIds, loadClaimedRewardsFromStorage } from "@/lib/reward-state";
+import { getPendingRewardIds, loadClaimedRewardsFromStorage, loadRecurringRewardsFromStorage } from "@/lib/reward-state";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "sopro-ducktive-daily-v1";
@@ -46,7 +46,8 @@ function hasClaimableReward() {
         completedTaskIds,
         completionDatesByTask
       },
-      loadClaimedRewardsFromStorage()
+      loadClaimedRewardsFromStorage(),
+      loadRecurringRewardsFromStorage()
     ).length > 0;
   } catch {
     return false;

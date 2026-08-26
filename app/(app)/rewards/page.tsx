@@ -8,7 +8,6 @@ import {
   BookOpen,
   Brain,
   BriefcaseBusiness,
-  CheckCircle2,
   ChevronDown,
   Dumbbell,
   Flame,
@@ -17,6 +16,7 @@ import {
   Lock,
   LockOpen,
   Medal,
+  RefreshCw,
   Sun,
   Trophy,
   X,
@@ -31,10 +31,15 @@ import {
   getGeneralRewardProgress,
   getPendingRewardIds,
   getRewardTagTotals,
+  isRecurringReward,
   isRewardClaimEligible,
   loadClaimedRewardsFromStorage,
+  loadRecurringRewardsFromStorage,
+  resetRecurringRewardAfterClaim,
   saveClaimedRewardsToStorage,
+  saveRecurringRewardsToStorage,
   type GeneralRewardDefinition,
+  type RecurringRewardState,
   type RewardDailyState
 } from "@/lib/reward-state";
 import {
@@ -179,12 +184,17 @@ const achievementStatusOrder: Record<AchievementStatus, number> = {
   unlocked: 2
 };
 
-function getAchievementStatus(id: string, state: DailyState, claimed: Set<string>): AchievementStatus {
-  if (claimed.has(id)) {
+function getAchievementStatus(
+  id: string,
+  state: DailyState,
+  claimed: Set<string>,
+  recurringRewards: RecurringRewardState = {}
+): AchievementStatus {
+  if (!isRecurringReward(id) && claimed.has(id)) {
     return "unlocked";
   }
 
-  return isRewardClaimEligible(id, state) ? "claimable" : "locked";
+  return isRewardClaimEligible(id, state, recurringRewards) ? "claimable" : "locked";
 }
 
 function statusLabel(status: AchievementStatus) {
@@ -208,15 +218,14 @@ const rewardTagIcons: Record<TaskTag, LucideIcon> = {
 function RewardRequirementIcons({ reward }: { reward: GeneralRewardDefinition }) {
   const criterion = reward.criterion;
   const tags = criterion.kind === "tag-streak" ? criterion.tags : [];
-  const streakDays = criterion.kind === "daily-all" ? null : criterion.days;
+  const streakDays = criterion.days;
 
   return (
     <div className="flex shrink-0 items-center gap-1.5" aria-label={`Requirement icons for ${reward.description}`}>
-      {criterion.kind === "daily-all" ? (
-        <span className="grid h-10 w-10 place-items-center rounded-2xl bg-muted text-primary" title="Complete all daily tasks">
-          <CheckCircle2 className="h-5 w-5" />
-        </span>
-      ) : null}
+      <span className="flex h-10 min-w-10 items-center justify-center gap-1 rounded-2xl bg-orange-500/15 px-2 text-orange-400" title={`${streakDays} day streak`}>
+        <Flame className="h-5 w-5 fill-orange-400" />
+        <span className="text-sm font-black">{streakDays}</span>
+      </span>
       {tags.map((tag) => {
         const TagIcon = rewardTagIcons[tag];
         const label = getTaskTagLabel(tag) ?? tag;
@@ -226,10 +235,9 @@ function RewardRequirementIcons({ reward }: { reward: GeneralRewardDefinition })
           </span>
         );
       })}
-      {streakDays !== null ? (
-        <span className="flex h-10 min-w-10 items-center justify-center gap-1 rounded-2xl bg-orange-500/15 px-2 text-orange-400" title={`${streakDays} day streak`}>
-          <Flame className="h-5 w-5 fill-orange-400" />
-          <span className="text-sm font-black">{streakDays}</span>
+      {reward.recurring ? (
+        <span className="grid h-10 w-10 place-items-center rounded-2xl bg-muted text-primary" title="Repeats after each claim">
+          <RefreshCw className="h-5 w-5" />
         </span>
       ) : null}
     </div>
@@ -371,6 +379,7 @@ export default function RewardsPage() {
   const [activeTab, setActiveTab] = useState<RewardsTab>("rewards");
   const [dailyState, setDailyState] = useState<DailyState>({ tasks: [], completedTaskIds: [], completionDatesByTask: {}, totalXp: 0 });
   const [claimedRewards, setClaimedRewards] = useState<Set<string>>(() => new Set());
+  const [recurringRewards, setRecurringRewards] = useState<RecurringRewardState>({});
   const [claimBursts, setClaimBursts] = useState<string[]>([]);
   const [visibleRewardCount, setVisibleRewardCount] = useState(REWARD_BATCH_SIZE);
   const [visibleLevelRewardCount, setVisibleLevelRewardCount] = useState(LEVEL_REWARD_BATCH_SIZE);
@@ -405,19 +414,19 @@ export default function RewardsPage() {
   const sortedRewardRows = useMemo(
     () =>
       [...rewardRows].sort((first, second) => {
-        const firstStatus = getAchievementStatus(`reward:${first.id}`, dailyState, claimedRewards);
-        const secondStatus = getAchievementStatus(`reward:${second.id}`, dailyState, claimedRewards);
+        const firstStatus = getAchievementStatus(`reward:${first.id}`, dailyState, claimedRewards, recurringRewards);
+        const secondStatus = getAchievementStatus(`reward:${second.id}`, dailyState, claimedRewards, recurringRewards);
         return achievementStatusOrder[firstStatus] - achievementStatusOrder[secondStatus];
       }),
-    [claimedRewards, dailyState]
+    [claimedRewards, dailyState, recurringRewards]
   );
   const visibleRewardRows = sortedRewardRows.slice(0, visibleRewardCount);
   const pendingRewardIds = useMemo(
     () =>
       rewardRows
-        .filter((reward) => isRewardClaimEligible(`reward:${reward.id}`, dailyState) && !claimedRewards.has(`reward:${reward.id}`))
+        .filter((reward) => getAchievementStatus(`reward:${reward.id}`, dailyState, claimedRewards, recurringRewards) === "claimable")
         .map((reward) => `reward:${reward.id}`),
-    [claimedRewards, dailyState]
+    [claimedRewards, dailyState, recurringRewards]
   );
   const pendingLevelRewardIds = useMemo(
     () => getPendingRewardIds(dailyState, claimedRewards).filter((id) => id.startsWith("level:")),
@@ -445,10 +454,12 @@ export default function RewardsPage() {
   useEffect(() => {
     setDailyState(loadDailyState());
     setClaimedRewards(loadClaimedRewardsFromStorage());
+    setRecurringRewards(loadRecurringRewardsFromStorage());
 
     function syncState() {
       setDailyState(loadDailyState());
       setClaimedRewards(loadClaimedRewardsFromStorage());
+      setRecurringRewards(loadRecurringRewardsFromStorage());
     }
 
     window.addEventListener("storage", syncState);
@@ -495,14 +506,20 @@ export default function RewardsPage() {
   }
 
   function claimReward(id: string, xp = 0) {
-    if (getAchievementStatus(id, dailyState, claimedRewards) !== "claimable") {
+    if (getAchievementStatus(id, dailyState, claimedRewards, recurringRewards) !== "claimable") {
       return;
     }
 
-    const nextClaimed = new Set(claimedRewards);
-    nextClaimed.add(id);
-    setClaimedRewards(nextClaimed);
-    saveClaimedRewardsToStorage(nextClaimed);
+    if (isRecurringReward(id)) {
+      const nextRecurringRewards = resetRecurringRewardAfterClaim(id, recurringRewards);
+      setRecurringRewards(nextRecurringRewards);
+      saveRecurringRewardsToStorage(nextRecurringRewards);
+    } else {
+      const nextClaimed = new Set(claimedRewards);
+      nextClaimed.add(id);
+      setClaimedRewards(nextClaimed);
+      saveClaimedRewardsToStorage(nextClaimed);
+    }
     window.dispatchEvent(new Event("motive-rewards-claimed-change"));
     setClaimBursts((current) => [...current, id]);
     window.setTimeout(() => setClaimBursts((current) => current.filter((burstId) => burstId !== id)), 720);
@@ -551,10 +568,10 @@ export default function RewardsPage() {
               ? { title: reward.description, config: createRewardConfig(reward.cosmetic) }
               : null;
             const rewardId = `reward:${reward.id}`;
-            const status = getAchievementStatus(rewardId, dailyState, claimedRewards);
+            const status = getAchievementStatus(rewardId, dailyState, claimedRewards, recurringRewards);
             const pending = status === "claimable";
             const expanded = expandedRewardId === reward.id;
-            const progressItems = getGeneralRewardProgress(reward.id, dailyState);
+            const progressItems = getGeneralRewardProgress(reward.id, dailyState, recurringRewards);
 
             return (
               <div
@@ -573,9 +590,11 @@ export default function RewardsPage() {
                   >
                     <RewardRequirementIcons reward={reward} />
                     <div className="min-w-0 flex-1">
-                      <div className={pending ? "text-xs font-black text-secondary" : "text-xs font-bold text-muted-foreground"}>
-                        {statusLabel(status) || "View details"}
-                      </div>
+                      {statusLabel(status) ? (
+                        <div className={pending ? "text-xs font-black text-secondary" : "text-xs font-bold text-muted-foreground"}>
+                          {statusLabel(status)}
+                        </div>
+                      ) : null}
                     </div>
                     <ChevronDown className={expanded ? "h-5 w-5 shrink-0 rotate-180 text-muted-foreground transition-transform" : "h-5 w-5 shrink-0 text-muted-foreground transition-transform"} />
                   </button>
@@ -597,6 +616,9 @@ export default function RewardsPage() {
                   <div className="overflow-hidden">
                     <div className={expanded ? "mt-4 border-t border-white/10 pt-4 opacity-100 transition-opacity delay-100" : "opacity-0 transition-opacity"}>
                       <h2 className="break-words font-black">{reward.description}</h2>
+                      {reward.recurring ? (
+                        <p className="mt-1 text-xs font-bold text-muted-foreground">Resets after each claim so it can be earned again.</p>
+                      ) : null}
                       <div className="mt-3 space-y-3">
                         {progressItems.map((progress) => {
                           const remaining = Math.max(0, progress.target - progress.current);

@@ -14,6 +14,7 @@ const BACKUP_KEYS = [
   "sopro-ducktive-avatar-paused",
   "sopro-ducktive-admin-unlocked",
   "sopro-ducktive-claimed-rewards-v1",
+  "sopro-ducktive-recurring-rewards-v1",
   "motive-public-profile-enabled",
   "motive-public-profile-name"
 ];

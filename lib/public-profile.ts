@@ -3,7 +3,7 @@
 import { getLevelSnapshot } from "@/lib/levels";
 import { createClient } from "@/lib/supabase/client";
 import { getStoredAvatarConfig, normalizeAvatarConfig, type AvatarConfig } from "@/lib/avatar";
-import { getRewardTagTotals } from "@/lib/reward-state";
+import { getRewardTagTotals, isRecurringReward, isRetiredRewardId } from "@/lib/reward-state";
 
 const DAILY_STORAGE_KEY = "sopro-ducktive-daily-v1";
 const CLAIMED_REWARDS_KEY = "sopro-ducktive-claimed-rewards-v1";
@@ -114,7 +114,9 @@ function getClaimedAchievementCount() {
 
   try {
     const saved = JSON.parse(window.localStorage.getItem(CLAIMED_REWARDS_KEY) ?? "[]") as unknown;
-    return Array.isArray(saved) ? saved.filter((id) => typeof id === "string").length : 0;
+    return Array.isArray(saved)
+      ? saved.filter((id) => typeof id === "string" && !isRetiredRewardId(id) && !isRecurringReward(id)).length
+      : 0;
   } catch {
     return 0;
   }

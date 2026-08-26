@@ -3,6 +3,9 @@ import { getLevelSnapshot } from "@/lib/levels";
 import { getStoredTaskTag, getTaskTagLabel, type TaskTag } from "@/lib/task-tags";
 
 export const CLAIMED_REWARDS_KEY = "sopro-ducktive-claimed-rewards-v1";
+export const RECURRING_REWARDS_KEY = "sopro-ducktive-recurring-rewards-v1";
+
+export type RecurringRewardState = Record<string, string>;
 
 export type RewardStateTask = {
   id?: string;
@@ -18,7 +21,6 @@ export type RewardDailyState = {
 };
 
 type GeneralRewardCriterion =
-  | { kind: "daily-all" }
   | { kind: "any-task-streak"; days: number }
   | { kind: "tag-streak"; tags: TaskTag[]; days: number }
   | { kind: "simultaneous-task-streak"; taskCount: number; days: number };
@@ -27,6 +29,7 @@ export type GeneralRewardDefinition = {
   id: string;
   description: string;
   criterion: GeneralRewardCriterion;
+  recurring?: boolean;
 };
 
 export type GeneralRewardProgressItem = {
@@ -37,7 +40,7 @@ export type GeneralRewardProgressItem = {
 };
 
 export const generalRewardDefinitions: GeneralRewardDefinition[] = [
-  { id: "daily-all", description: "Complete all your daily tasks", criterion: { kind: "daily-all" } },
+  { id: "weekly-streak-7", description: "Weekly streak - Have a 7 day streak on any task", criterion: { kind: "any-task-streak", days: 7 }, recurring: true },
   { id: "streak-7", description: "Get a 7 day streak on any task", criterion: { kind: "any-task-streak", days: 7 } },
   { id: "streak-30", description: "Get a 30 day streak on any task", criterion: { kind: "any-task-streak", days: 30 } },
   { id: "sleep-30-total", description: "Get a 21 day Wake up streak", criterion: { kind: "tag-streak", tags: ["wake-up"], days: 21 } },
@@ -47,12 +50,13 @@ export const generalRewardDefinitions: GeneralRewardDefinition[] = [
 ];
 
 export const generalRewardXp: Record<string, number> = {
-  "reward:daily-all": 5,
+  "reward:weekly-streak-7": 30,
   "reward:streak-7": 50,
   "reward:streak-30": 500
 };
 
 const generalRewardIds = generalRewardDefinitions.map((reward) => `reward:${reward.id}`);
+const retiredRewardIds = new Set(["reward:daily-all"]);
 
 const medalThresholds: Array<{ tag: string; tier: "Bronze" | "Silver" | "Gold"; completions: number }> = [
   { tag: "run", tier: "Bronze", completions: 7 },
@@ -125,9 +129,12 @@ export function getRewardTagTotals(state: RewardDailyState) {
   }, {});
 }
 
-function getBestTaskStreak(state: RewardDailyState) {
+function getBestTaskStreak(state: RewardDailyState, afterDate?: string) {
   const tasks = Array.isArray(state.tasks) ? state.tasks : [];
-  return Math.max(0, ...tasks.map((task) => getLongestRewardStreak(task.id ? state.completionDatesByTask?.[task.id] ?? [] : [])));
+  return Math.max(0, ...tasks.map((task) => {
+    const completionDates = task.id ? state.completionDatesByTask?.[task.id] ?? [] : [];
+    return getLongestRewardStreak(afterDate ? completionDates.filter((date) => date > afterDate) : completionDates);
+  }));
 }
 
 function getMaxSimultaneousTaskStreakCount(state: RewardDailyState, requiredDays: number) {
@@ -155,28 +162,23 @@ function getMaxSimultaneousTaskStreakCount(state: RewardDailyState, requiredDays
   return Math.max(0, ...qualifyingTasksByDate.values());
 }
 
-export function getGeneralRewardProgress(id: string, state: RewardDailyState): GeneralRewardProgressItem[] {
-  const reward = generalRewardDefinitions.find((item) => item.id === id.replace(/^reward:/, ""));
+export function getGeneralRewardProgress(
+  id: string,
+  state: RewardDailyState,
+  recurringRewards: RecurringRewardState = {}
+): GeneralRewardProgressItem[] {
+  const normalizedId = id.replace(/^reward:/, "");
+  const rewardId = `reward:${normalizedId}`;
+  const reward = generalRewardDefinitions.find((item) => item.id === normalizedId);
   if (!reward) {
     return [];
   }
   const criterion = reward.criterion;
 
-  if (criterion.kind === "daily-all") {
-    const tasks = Array.isArray(state.tasks) ? state.tasks.filter((task) => task.id) : [];
-    const completedTaskIds = new Set(Array.isArray(state.completedTaskIds) ? state.completedTaskIds : []);
-    return [{
-      label: "Daily tasks completed",
-      current: tasks.filter((task) => task.id && completedTaskIds.has(task.id)).length,
-      target: tasks.length,
-      unit: "tasks"
-    }];
-  }
-
   if (criterion.kind === "any-task-streak") {
     return [{
       label: "Best task streak",
-      current: getBestTaskStreak(state),
+      current: getBestTaskStreak(state, reward.recurring ? recurringRewards[rewardId] : undefined),
       target: criterion.days,
       unit: "days"
     }];
@@ -204,12 +206,21 @@ export function getClaimedRewardXp(id: string) {
   return generalRewardXp[id] ?? 0;
 }
 
-export function isRewardClaimEligible(id: string, state: RewardDailyState) {
+export function isRecurringReward(id: string) {
+  const normalizedId = id.replace(/^reward:/, "");
+  return generalRewardDefinitions.some((reward) => reward.id === normalizedId && reward.recurring);
+}
+
+export function isRetiredRewardId(id: string) {
+  return retiredRewardIds.has(id);
+}
+
+export function isRewardClaimEligible(id: string, state: RewardDailyState, recurringRewards: RecurringRewardState = {}) {
   const tagTotals = getRewardTagTotals(state);
   const generalReward = generalRewardDefinitions.find((reward) => `reward:${reward.id}` === id);
 
   if (generalReward) {
-    const progress = getGeneralRewardProgress(generalReward.id, state);
+    const progress = getGeneralRewardProgress(generalReward.id, state, recurringRewards);
     return progress.length > 0 && progress.every((item) => item.target > 0 && item.current >= item.target);
   }
 
@@ -227,22 +238,24 @@ export function isRewardClaimEligible(id: string, state: RewardDailyState) {
   return false;
 }
 
-export function getPendingRewardIds(state: RewardDailyState, claimed: Set<string>) {
+export function getPendingRewardIds(
+  state: RewardDailyState,
+  claimed: Set<string>,
+  recurringRewards: RecurringRewardState = {}
+) {
   return [
     ...generalRewardIds,
     ...avatarLevelRewards.map((reward) => `level:${reward.level}`),
     ...medalThresholds.map((medal) => `medal:${medal.tag}:${medal.tier}`)
-  ].filter((id) => isRewardClaimEligible(id, state) && !claimed.has(id));
+  ].filter((id) => isRewardClaimEligible(id, state, recurringRewards) && (isRecurringReward(id) || !claimed.has(id)));
 }
 
 export function reconcileClaimedRewards<TState extends RewardDailyState>(state: TState, claimed: Set<string>) {
-  // Claimed achievements are permanent. Their original eligibility can be
-  // temporary (for example, completing every daily task), but once claimed
-  // they must remain unlocked on future days.
+  const nextClaimed = new Set(Array.from(claimed).filter((id) => !isRetiredRewardId(id) && !isRecurringReward(id)));
   return {
     state: { ...state, totalXp: Math.max(0, Number(state.totalXp) || 0) } as TState,
-    claimed: new Set(claimed),
-    changed: false
+    claimed: nextClaimed,
+    changed: nextClaimed.size !== claimed.size
   };
 }
 
@@ -253,12 +266,54 @@ export function loadClaimedRewardsFromStorage() {
 
   try {
     const saved = JSON.parse(window.localStorage.getItem(CLAIMED_REWARDS_KEY) ?? "[]") as unknown;
-    return new Set(Array.isArray(saved) ? saved.filter((id): id is string => typeof id === "string") : []);
+    const validIds = Array.isArray(saved)
+      ? saved.filter((id): id is string => typeof id === "string" && !isRetiredRewardId(id) && !isRecurringReward(id))
+      : [];
+    if (Array.isArray(saved) && validIds.length !== saved.length) {
+      window.localStorage.setItem(CLAIMED_REWARDS_KEY, JSON.stringify(validIds));
+    }
+    return new Set(validIds);
   } catch {
     return new Set<string>();
   }
 }
 
 export function saveClaimedRewardsToStorage(claimed: Set<string>) {
-  window.localStorage.setItem(CLAIMED_REWARDS_KEY, JSON.stringify(Array.from(claimed)));
+  window.localStorage.setItem(
+    CLAIMED_REWARDS_KEY,
+    JSON.stringify(Array.from(claimed).filter((id) => !isRetiredRewardId(id) && !isRecurringReward(id)))
+  );
+}
+
+export function loadRecurringRewardsFromStorage(): RecurringRewardState {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(RECURRING_REWARDS_KEY) ?? "{}") as unknown;
+    if (!saved || typeof saved !== "object" || Array.isArray(saved)) {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(saved).filter(([id, date]) => isRecurringReward(id) && typeof date === "string")
+    ) as RecurringRewardState;
+  } catch {
+    return {};
+  }
+}
+
+export function saveRecurringRewardsToStorage(state: RecurringRewardState) {
+  window.localStorage.setItem(RECURRING_REWARDS_KEY, JSON.stringify(state));
+}
+
+export function resetRecurringRewardAfterClaim(
+  id: string,
+  state: RecurringRewardState,
+  date = new Date()
+): RecurringRewardState {
+  const rewardId = id.startsWith("reward:") ? id : `reward:${id}`;
+  const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  return { ...state, [rewardId]: dateKey };
 }
