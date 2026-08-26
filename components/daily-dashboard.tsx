@@ -1012,9 +1012,6 @@ export function DailyDashboard() {
         completedSubtaskIdsByTask: Object.fromEntries(
           Object.entries(current.completedSubtaskIdsByTask).filter(([id]) => id !== taskId)
         ),
-        completionDatesByTask: Object.fromEntries(
-          Object.entries(current.completionDatesByTask).filter(([id]) => id !== taskId)
-        ),
         totalXp: Math.max(0, current.totalXp - (wasCompleted ? 10 : 0))
       };
     });

@@ -8,6 +8,7 @@ import {
   BookOpen,
   Brain,
   BriefcaseBusiness,
+  CheckCircle2,
   ChevronDown,
   Dumbbell,
   Flame,
@@ -218,14 +219,23 @@ const rewardTagIcons: Record<TaskTag, LucideIcon> = {
 function RewardRequirementIcons({ reward }: { reward: GeneralRewardDefinition }) {
   const criterion = reward.criterion;
   const tags = criterion.kind === "tag-streak" ? criterion.tags : [];
-  const streakDays = criterion.days;
+  const streakDays = "days" in criterion ? criterion.days : null;
+  const completionCount = "count" in criterion ? criterion.count : null;
 
   return (
     <div className="flex shrink-0 items-center gap-1.5" aria-label={`Requirement icons for ${reward.description}`}>
-      <span className="flex h-10 min-w-10 items-center justify-center gap-1 rounded-2xl bg-orange-500/15 px-2 text-orange-400" title={`${streakDays} day streak`}>
-        <Flame className="h-5 w-5 fill-orange-400" />
-        <span className="text-sm font-black">{streakDays}</span>
-      </span>
+      {streakDays !== null ? (
+        <span className="flex h-10 min-w-10 items-center justify-center gap-1 rounded-2xl bg-orange-500/15 px-2 text-orange-400" title={`${streakDays} day streak`}>
+          <Flame className="h-5 w-5 fill-orange-400" />
+          <span className="text-sm font-black">{streakDays}</span>
+        </span>
+      ) : null}
+      {completionCount !== null ? (
+        <span className="flex h-10 min-w-10 items-center justify-center gap-1 rounded-2xl bg-primary/10 px-2 text-primary" title={`${completionCount} task completions`}>
+          <CheckCircle2 className="h-5 w-5" />
+          <span className="text-sm font-black">{completionCount}</span>
+        </span>
+      ) : null}
       {tags.map((tag) => {
         const TagIcon = rewardTagIcons[tag];
         const label = getTaskTagLabel(tag) ?? tag;
@@ -617,7 +627,11 @@ export default function RewardsPage() {
                     <div className={expanded ? "mt-4 border-t border-white/10 pt-4 opacity-100 transition-opacity delay-100" : "opacity-0 transition-opacity"}>
                       <h2 className="break-words font-black">{reward.description}</h2>
                       {reward.recurring ? (
-                        <p className="mt-1 text-xs font-bold text-muted-foreground">Resets after each claim so it can be earned again.</p>
+                        <p className="mt-1 text-xs font-bold text-muted-foreground">
+                          {reward.criterion.kind === "daily-task-completions"
+                            ? "Can be claimed once per day and resets after each claim."
+                            : "Resets after each claim so it can be earned again."}
+                        </p>
                       ) : null}
                       <div className="mt-3 space-y-3">
                         {progressItems.map((progress) => {

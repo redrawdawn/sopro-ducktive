@@ -23,7 +23,9 @@ export type RewardDailyState = {
 type GeneralRewardCriterion =
   | { kind: "any-task-streak"; days: number }
   | { kind: "tag-streak"; tags: TaskTag[]; days: number }
-  | { kind: "simultaneous-task-streak"; taskCount: number; days: number };
+  | { kind: "simultaneous-task-streak"; taskCount: number; days: number }
+  | { kind: "total-task-completions"; count: number }
+  | { kind: "daily-task-completions"; count: number };
 
 export type GeneralRewardDefinition = {
   id: string;
@@ -41,6 +43,9 @@ export type GeneralRewardProgressItem = {
 
 export const generalRewardDefinitions: GeneralRewardDefinition[] = [
   { id: "weekly-streak-7", description: "Weekly streak - Have a 7 day streak on any task", criterion: { kind: "any-task-streak", days: 7 }, recurring: true },
+  { id: "daily-tasks-5", description: "Complete 5 tasks in one day", criterion: { kind: "daily-task-completions", count: 5 }, recurring: true },
+  { id: "tasks-total-50", description: "Complete 50 tasks in total", criterion: { kind: "total-task-completions", count: 50 } },
+  { id: "tasks-total-100", description: "Complete 100 tasks in total", criterion: { kind: "total-task-completions", count: 100 } },
   { id: "streak-7", description: "Get a 7 day streak on any task", criterion: { kind: "any-task-streak", days: 7 } },
   { id: "streak-30", description: "Get a 30 day streak on any task", criterion: { kind: "any-task-streak", days: 30 } },
   { id: "sleep-30-total", description: "Get a 21 day Wake up streak", criterion: { kind: "tag-streak", tags: ["wake-up"], days: 21 } },
@@ -51,6 +56,9 @@ export const generalRewardDefinitions: GeneralRewardDefinition[] = [
 
 export const generalRewardXp: Record<string, number> = {
   "reward:weekly-streak-7": 30,
+  "reward:daily-tasks-5": 10,
+  "reward:tasks-total-50": 50,
+  "reward:tasks-total-100": 100,
   "reward:streak-7": 50,
   "reward:streak-30": 500
 };
@@ -129,6 +137,10 @@ export function getRewardTagTotals(state: RewardDailyState) {
   }, {});
 }
 
+function localDateKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
 function getBestTaskStreak(state: RewardDailyState, afterDate?: string) {
   const tasks = Array.isArray(state.tasks) ? state.tasks : [];
   return Math.max(0, ...tasks.map((task) => {
@@ -162,6 +174,21 @@ function getMaxSimultaneousTaskStreakCount(state: RewardDailyState, requiredDays
   return Math.max(0, ...qualifyingTasksByDate.values());
 }
 
+function getTotalTaskCompletions(state: RewardDailyState) {
+  const completionDatesByTask =
+    state.completionDatesByTask && typeof state.completionDatesByTask === "object" ? state.completionDatesByTask : {};
+
+  return Object.values(completionDatesByTask).reduce(
+    (total, dates) => total + new Set(Array.isArray(dates) ? dates : []).size,
+    0
+  );
+}
+
+function getTasksCompletedOnDate(state: RewardDailyState, dateKey: string) {
+  const tasks = Array.isArray(state.tasks) ? state.tasks : [];
+  return tasks.filter((task) => task.id && state.completionDatesByTask?.[task.id]?.includes(dateKey)).length;
+}
+
 export function getGeneralRewardProgress(
   id: string,
   state: RewardDailyState,
@@ -192,6 +219,25 @@ export function getGeneralRewardProgress(
       target: criterion.days,
       unit: "days"
     }));
+  }
+
+  if (criterion.kind === "total-task-completions") {
+    return [{
+      label: "Tasks completed in total",
+      current: getTotalTaskCompletions(state),
+      target: criterion.count,
+      unit: "tasks"
+    }];
+  }
+
+  if (criterion.kind === "daily-task-completions") {
+    const today = localDateKey();
+    return [{
+      label: "Tasks completed today",
+      current: recurringRewards[rewardId] === today ? 0 : getTasksCompletedOnDate(state, today),
+      target: criterion.count,
+      unit: "tasks"
+    }];
   }
 
   return [{
@@ -314,6 +360,5 @@ export function resetRecurringRewardAfterClaim(
   date = new Date()
 ): RecurringRewardState {
   const rewardId = id.startsWith("reward:") ? id : `reward:${id}`;
-  const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-  return { ...state, [rewardId]: dateKey };
+  return { ...state, [rewardId]: localDateKey(date) };
 }
