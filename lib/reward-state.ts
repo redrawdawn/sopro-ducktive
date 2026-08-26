@@ -33,22 +33,22 @@ const generalRewardIds = [
   "reward:five-daily-7"
 ];
 
-const medalThresholds: Array<{ tag: string; tier: "Bronze" | "Silver" | "Gold"; days: number }> = [
-  { tag: "run", tier: "Bronze", days: 7 },
-  { tag: "run", tier: "Silver", days: 30 },
-  { tag: "run", tier: "Gold", days: 60 },
-  { tag: "workout", tier: "Bronze", days: 7 },
-  { tag: "workout", tier: "Silver", days: 30 },
-  { tag: "workout", tier: "Gold", days: 60 },
-  { tag: "wake-up", tier: "Bronze", days: 7 },
-  { tag: "wake-up", tier: "Silver", days: 30 },
-  { tag: "wake-up", tier: "Gold", days: 60 },
-  { tag: "read", tier: "Bronze", days: 7 },
-  { tag: "read", tier: "Silver", days: 30 },
-  { tag: "read", tier: "Gold", days: 60 },
-  { tag: "meditate", tier: "Bronze", days: 7 },
-  { tag: "meditate", tier: "Silver", days: 30 },
-  { tag: "meditate", tier: "Gold", days: 60 }
+const medalThresholds: Array<{ tag: string; tier: "Bronze" | "Silver" | "Gold"; completions: number }> = [
+  { tag: "run", tier: "Bronze", completions: 7 },
+  { tag: "run", tier: "Silver", completions: 30 },
+  { tag: "run", tier: "Gold", completions: 60 },
+  { tag: "workout", tier: "Bronze", completions: 7 },
+  { tag: "workout", tier: "Silver", completions: 30 },
+  { tag: "workout", tier: "Gold", completions: 60 },
+  { tag: "wake-up", tier: "Bronze", completions: 7 },
+  { tag: "wake-up", tier: "Silver", completions: 30 },
+  { tag: "wake-up", tier: "Gold", completions: 60 },
+  { tag: "read", tier: "Bronze", completions: 7 },
+  { tag: "read", tier: "Silver", completions: 30 },
+  { tag: "read", tier: "Gold", completions: 60 },
+  { tag: "meditate", tier: "Bronze", completions: 7 },
+  { tag: "meditate", tier: "Silver", completions: 30 },
+  { tag: "meditate", tier: "Gold", completions: 60 }
 ];
 
 function daysBetween(startDateKey: string, endDateKey: string) {
@@ -151,7 +151,7 @@ export function isRewardClaimEligible(id: string, state: RewardDailyState) {
   if (id.startsWith("medal:")) {
     const [, tag, tier] = id.split(":");
     const medal = medalThresholds.find((item) => item.tag === tag && item.tier === tier);
-    return medal ? (tagStreaks[tag] ?? 0) >= medal.days : false;
+    return medal ? (tagTotals[tag] ?? 0) >= medal.completions : false;
   }
 
   return false;

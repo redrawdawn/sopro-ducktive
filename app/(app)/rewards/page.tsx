@@ -10,7 +10,7 @@ import { XpProgressBar } from "@/components/xp-progress-bar";
 import { backupMotiveState } from "@/lib/motive-backup";
 import {
   getPendingRewardIds,
-  getRewardTagStreaks,
+  getRewardTagTotals,
   isRewardClaimEligible,
   loadClaimedRewardsFromStorage,
   saveClaimedRewardsToStorage,
@@ -72,7 +72,7 @@ type LevelReward = RewardPreview & {
 };
 type MedalTier = {
   tier: "Bronze" | "Silver" | "Gold";
-  days: number;
+  completions: number;
   color: string;
   reward: Omit<AvatarCosmeticReward, "level">;
 };
@@ -99,9 +99,9 @@ const medalSets: MedalSet[] = [
     label: "Run",
     Icon: Footprints,
     tiers: [
-      { tier: "Bronze", days: 7, color: "#8f4f22", reward: { category: "Legs", part: "legs-insect.png" } },
-      { tier: "Silver", days: 30, color: "#c0c0c0", reward: { category: "Legs", part: "legs-four.png" } },
-      { tier: "Gold", days: 60, color: "#ffd700", reward: { category: "Legs", part: "legs-spider.png" } }
+      { tier: "Bronze", completions: 7, color: "#8f4f22", reward: { category: "Legs", part: "legs-insect.png" } },
+      { tier: "Silver", completions: 30, color: "#c0c0c0", reward: { category: "Legs", part: "legs-four.png" } },
+      { tier: "Gold", completions: 60, color: "#ffd700", reward: { category: "Legs", part: "legs-spider.png" } }
     ]
   },
   {
@@ -109,9 +109,9 @@ const medalSets: MedalSet[] = [
     label: "Workout",
     Icon: Dumbbell,
     tiers: [
-      { tier: "Bronze", days: 7, color: "#8f4f22", reward: { category: "Arms", part: "arms-noodle.png" } },
-      { tier: "Silver", days: 30, color: "#c0c0c0", reward: { category: "Arms", part: "arms-fingers.png" } },
-      { tier: "Gold", days: 60, color: "#ffd700", reward: { category: "Arms", part: "arms-large.png" } }
+      { tier: "Bronze", completions: 7, color: "#8f4f22", reward: { category: "Arms", part: "arms-noodle.png" } },
+      { tier: "Silver", completions: 30, color: "#c0c0c0", reward: { category: "Arms", part: "arms-fingers.png" } },
+      { tier: "Gold", completions: 60, color: "#ffd700", reward: { category: "Arms", part: "arms-large.png" } }
     ]
   },
   {
@@ -119,9 +119,9 @@ const medalSets: MedalSet[] = [
     label: "Wake up",
     Icon: Sun,
     tiers: [
-      { tier: "Bronze", days: 7, color: "#8f4f22", reward: { category: "Face", part: "face-sleep.png" } },
-      { tier: "Silver", days: 30, color: "#c0c0c0", reward: { category: "Face", part: "face-grumpy.png" } },
-      { tier: "Gold", days: 60, color: "#ffd700", reward: { category: "Face", part: "face-monster.png" } }
+      { tier: "Bronze", completions: 7, color: "#8f4f22", reward: { category: "Face", part: "face-sleep.png" } },
+      { tier: "Silver", completions: 30, color: "#c0c0c0", reward: { category: "Face", part: "face-grumpy.png" } },
+      { tier: "Gold", completions: 60, color: "#ffd700", reward: { category: "Face", part: "face-monster.png" } }
     ]
   },
   {
@@ -129,9 +129,9 @@ const medalSets: MedalSet[] = [
     label: "Read",
     Icon: BookOpen,
     tiers: [
-      { tier: "Bronze", days: 7, color: "#8f4f22", reward: { category: "Face", part: "face-glasses.png" } },
-      { tier: "Silver", days: 30, color: "#c0c0c0", reward: { category: "Face", part: "face-specs.png" } },
-      { tier: "Gold", days: 60, color: "#ffd700", reward: { category: "Face", part: "face-threeeyes.png" } }
+      { tier: "Bronze", completions: 7, color: "#8f4f22", reward: { category: "Face", part: "face-glasses.png" } },
+      { tier: "Silver", completions: 30, color: "#c0c0c0", reward: { category: "Face", part: "face-specs.png" } },
+      { tier: "Gold", completions: 60, color: "#ffd700", reward: { category: "Face", part: "face-threeeyes.png" } }
     ]
   },
   {
@@ -139,9 +139,9 @@ const medalSets: MedalSet[] = [
     label: "Meditate",
     Icon: Brain,
     tiers: [
-      { tier: "Bronze", days: 7, color: "#8f4f22", reward: { category: "Hat", part: "hat-arrow.png" } },
-      { tier: "Silver", days: 30, color: "#c0c0c0", reward: { category: "Hat", part: "hat-bowl.png" } },
-      { tier: "Gold", days: 60, color: "#ffd700", reward: { category: "Hat", part: "hat-wizard.png" } }
+      { tier: "Bronze", completions: 7, color: "#8f4f22", reward: { category: "Hat", part: "hat-arrow.png" } },
+      { tier: "Silver", completions: 30, color: "#c0c0c0", reward: { category: "Hat", part: "hat-bowl.png" } },
+      { tier: "Gold", completions: 60, color: "#ffd700", reward: { category: "Hat", part: "hat-wizard.png" } }
     ]
   }
 ];
@@ -310,7 +310,7 @@ export default function RewardsPage() {
   const levelRewardsScrollRef = useRef<HTMLDivElement | null>(null);
   const currentLevelRewardRef = useRef<HTMLButtonElement | null>(null);
   const level = useMemo(() => getLevelSnapshot(dailyState.totalXp), [dailyState.totalXp]);
-  const tagStreaks = useMemo(() => getRewardTagStreaks(dailyState), [dailyState]);
+  const tagTotals = useMemo(() => getRewardTagTotals(dailyState), [dailyState]);
   const currentRewardIndex = useMemo(() => {
     const nextIndex = levelRewards.findIndex((reward) => reward.level > level.level);
     return nextIndex === -1 ? levelRewards.length - 1 : nextIndex;
@@ -366,11 +366,11 @@ export default function RewardsPage() {
         if (firstStatus !== secondStatus) {
           return firstStatus - secondStatus;
         }
-        const firstProgress = Math.max(...first.tiers.map((tier) => Math.min(1, (tagStreaks[first.id] ?? 0) / tier.days)));
-        const secondProgress = Math.max(...second.tiers.map((tier) => Math.min(1, (tagStreaks[second.id] ?? 0) / tier.days)));
+        const firstProgress = Math.max(...first.tiers.map((tier) => Math.min(1, (tagTotals[first.id] ?? 0) / tier.completions)));
+        const secondProgress = Math.max(...second.tiers.map((tier) => Math.min(1, (tagTotals[second.id] ?? 0) / tier.completions)));
         return secondProgress - firstProgress;
       }),
-    [claimedRewards, dailyState, tagStreaks]
+    [claimedRewards, dailyState, tagTotals]
   );
 
   useEffect(() => {
@@ -615,8 +615,8 @@ export default function RewardsPage() {
       {activeTab === "medals" ? (
         <section className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
           {sortedMedalSets.map((set) => {
-            const streak = tagStreaks[set.id] ?? 0;
-            const activeTier = set.tiers.find((tier) => streak < tier.days) ?? set.tiers[set.tiers.length - 1];
+            const total = tagTotals[set.id] ?? 0;
+            const activeTier = set.tiers.find((tier) => total < tier.completions) ?? set.tiers[set.tiers.length - 1];
 
             return (
               <div key={set.id} className="neon-card rounded-3xl p-4">
@@ -624,11 +624,11 @@ export default function RewardsPage() {
                   {[...set.tiers].sort((first, second) => {
                     const firstStatus = getAchievementStatus(`medal:${set.id}:${first.tier}`, dailyState, claimedRewards);
                     const secondStatus = getAchievementStatus(`medal:${set.id}:${second.tier}`, dailyState, claimedRewards);
-                    return achievementStatusOrder[firstStatus] - achievementStatusOrder[secondStatus] || first.days - second.days;
+                    return achievementStatusOrder[firstStatus] - achievementStatusOrder[secondStatus] || first.completions - second.completions;
                   }).map((tier) => {
-                    const complete = streak >= tier.days;
+                    const complete = total >= tier.completions;
                     const expanded = tier.tier === activeTier.tier;
-                    const progress = Math.min(100, (streak / tier.days) * 100);
+                    const progress = Math.min(100, (total / tier.completions) * 100);
                     const rewardId = `medal:${set.id}:${tier.tier}`;
                     const status = getAchievementStatus(rewardId, dailyState, claimedRewards);
                     const pending = status === "claimable";
@@ -659,7 +659,7 @@ export default function RewardsPage() {
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-3">
                               <h3 className={expanded ? "font-black" : "text-xs font-black"}>{tier.tier}</h3>
-                              <span className="shrink-0 text-xs font-black text-secondary">{tier.days} days</span>
+                              <span className="shrink-0 text-xs font-black text-secondary">{tier.completions} completions</span>
                             </div>
                             <div className={expanded ? "mt-2 h-2 overflow-hidden rounded-full bg-background" : "mt-1 h-1 overflow-hidden rounded-full bg-background"}>
                               <div
@@ -668,7 +668,7 @@ export default function RewardsPage() {
                               />
                             </div>
                             <p className={expanded ? "mt-2 text-xs font-bold text-muted-foreground" : "mt-1 text-[10px] font-bold text-muted-foreground"}>
-                              {statusLabel(status) ? `${statusLabel(status)} · ` : ""}{streak}/{tier.days}
+                              {statusLabel(status) ? `${statusLabel(status)} · ` : ""}{total}/{tier.completions}
                             </p>
                           </div>
                           <span
