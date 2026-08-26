@@ -4,16 +4,37 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { BookOpen, Brain, Dumbbell, Footprints, Lock, LockOpen, Medal, Sun, Trophy, X } from "lucide-react";
+import {
+  BookOpen,
+  Brain,
+  BriefcaseBusiness,
+  CheckCircle2,
+  ChevronDown,
+  Dumbbell,
+  Flame,
+  Footprints,
+  Leaf,
+  Lock,
+  LockOpen,
+  Medal,
+  Sun,
+  Trophy,
+  X,
+  type LucideIcon
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { XpProgressBar } from "@/components/xp-progress-bar";
 import { backupMotiveState } from "@/lib/motive-backup";
 import {
+  generalRewardDefinitions,
+  generalRewardXp,
+  getGeneralRewardProgress,
   getPendingRewardIds,
   getRewardTagTotals,
   isRewardClaimEligible,
   loadClaimedRewardsFromStorage,
   saveClaimedRewardsToStorage,
+  type GeneralRewardDefinition,
   type RewardDailyState
 } from "@/lib/reward-state";
 import {
@@ -28,6 +49,7 @@ import {
   type AvatarCosmeticReward
 } from "@/lib/avatar";
 import { getLevelSnapshot } from "@/lib/levels";
+import { getTaskTagLabel, type TaskTag } from "@/lib/task-tags";
 
 const STORAGE_KEY = "sopro-ducktive-daily-v1";
 const LEVEL_REWARD_BATCH_SIZE = 5;
@@ -60,9 +82,7 @@ type RewardPreview = {
   title: string;
   config: AvatarConfig;
 };
-type RewardRow = {
-  id: string;
-  name: string;
+type RewardRow = GeneralRewardDefinition & {
   reward?: string;
   xp?: number;
   cosmetic?: Omit<AvatarCosmeticReward, "level">;
@@ -83,15 +103,22 @@ type MedalSet = {
   tiers: MedalTier[];
 };
 
-const rewardRows: RewardRow[] = [
-  { id: "daily-all", name: "Complete all your daily tasks", reward: "5 XP", xp: 5 },
-  { id: "streak-7", name: "7 Day Streak", reward: "50 XP", xp: 50 },
-  { id: "streak-30", name: "30 Day Streak", reward: "500 XP", xp: 500 },
-  { id: "sleep-30-total", name: "Complete a Wake up task 30 times", cosmetic: { category: "Hair", part: "hair-wild.png" } },
-  { id: "run-40-total", name: "Go on 40 runs total", cosmetic: { category: "Hat", part: "hat-band.png" } },
-  { id: "workout-run-7", name: "Have a workout and run streak of 7 or more at one time", cosmetic: { category: "Hat", part: "hat-ninja.png" } },
-  { id: "five-daily-7", name: "Have a 7 day streak on 5 daily tasks at once", cosmetic: { category: "Hat", part: "hat-military.png" } }
-];
+const rewardCosmetics: Record<string, Omit<AvatarCosmeticReward, "level">> = {
+  "sleep-30-total": { category: "Hair", part: "hair-wild.png" },
+  "run-40-total": { category: "Hat", part: "hat-band.png" },
+  "workout-run-7": { category: "Hat", part: "hat-ninja.png" },
+  "five-daily-7": { category: "Hat", part: "hat-military.png" }
+};
+
+const rewardRows: RewardRow[] = generalRewardDefinitions.map((reward) => {
+  const xp = generalRewardXp[`reward:${reward.id}`] ?? 0;
+  return {
+    ...reward,
+    reward: xp > 0 ? `${xp} XP` : undefined,
+    xp: xp > 0 ? xp : undefined,
+    cosmetic: rewardCosmetics[reward.id]
+  };
+});
 
 const medalSets: MedalSet[] = [
   {
@@ -166,6 +193,47 @@ function statusLabel(status: AchievementStatus) {
   }
 
   return status === "unlocked" ? "Claimed" : "";
+}
+
+const rewardTagIcons: Record<TaskTag, LucideIcon> = {
+  workout: Dumbbell,
+  run: Footprints,
+  read: BookOpen,
+  "wake-up": Sun,
+  meditate: Brain,
+  garden: Leaf,
+  work: BriefcaseBusiness
+};
+
+function RewardRequirementIcons({ reward }: { reward: GeneralRewardDefinition }) {
+  const criterion = reward.criterion;
+  const tags = criterion.kind === "tag-streak" ? criterion.tags : [];
+  const streakDays = criterion.kind === "daily-all" ? null : criterion.days;
+
+  return (
+    <div className="flex shrink-0 items-center gap-1.5" aria-label={`Requirement icons for ${reward.description}`}>
+      {criterion.kind === "daily-all" ? (
+        <span className="grid h-10 w-10 place-items-center rounded-2xl bg-muted text-primary" title="Complete all daily tasks">
+          <CheckCircle2 className="h-5 w-5" />
+        </span>
+      ) : null}
+      {tags.map((tag) => {
+        const TagIcon = rewardTagIcons[tag];
+        const label = getTaskTagLabel(tag) ?? tag;
+        return (
+          <span key={tag} className="grid h-10 w-10 place-items-center rounded-2xl bg-muted text-primary" title={`${label} tag`}>
+            <TagIcon className="h-5 w-5" />
+          </span>
+        );
+      })}
+      {streakDays !== null ? (
+        <span className="flex h-10 min-w-10 items-center justify-center gap-1 rounded-2xl bg-orange-500/15 px-2 text-orange-400" title={`${streakDays} day streak`}>
+          <Flame className="h-5 w-5 fill-orange-400" />
+          <span className="text-sm font-black">{streakDays}</span>
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 const levelRewards: LevelReward[] = Array.from({ length: 100 }, (_, index) => {
@@ -307,6 +375,7 @@ export default function RewardsPage() {
   const [visibleRewardCount, setVisibleRewardCount] = useState(REWARD_BATCH_SIZE);
   const [visibleLevelRewardCount, setVisibleLevelRewardCount] = useState(LEVEL_REWARD_BATCH_SIZE);
   const [selectedReward, setSelectedReward] = useState<RewardPreview | null>(null);
+  const [expandedRewardId, setExpandedRewardId] = useState<string | null>(null);
   const levelRewardsScrollRef = useRef<HTMLDivElement | null>(null);
   const currentLevelRewardRef = useRef<HTMLButtonElement | null>(null);
   const level = useMemo(() => getLevelSnapshot(dailyState.totalXp), [dailyState.totalXp]);
@@ -421,6 +490,7 @@ export default function RewardsPage() {
     }
     if (tab !== "rewards") {
       setVisibleRewardCount(REWARD_BATCH_SIZE);
+      setExpandedRewardId(null);
     }
   }
 
@@ -478,48 +548,89 @@ export default function RewardsPage() {
         <section className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-300">
           {visibleRewardRows.map((reward) => {
             const preview = reward.cosmetic
-              ? { title: reward.name, config: createRewardConfig(reward.cosmetic) }
+              ? { title: reward.description, config: createRewardConfig(reward.cosmetic) }
               : null;
             const rewardId = `reward:${reward.id}`;
             const status = getAchievementStatus(rewardId, dailyState, claimedRewards);
             const pending = status === "claimable";
+            const expanded = expandedRewardId === reward.id;
+            const progressItems = getGeneralRewardProgress(reward.id, dailyState);
 
             return (
-            <button
-              key={reward.name}
-              type="button"
-              onClick={() => pending && claimReward(rewardId, reward.xp ?? 0)}
-              className={pending ? "neon-card relative flex w-full items-center gap-3 rounded-3xl border-secondary/70 p-4 text-left shadow-xl shadow-secondary/10" : "neon-card relative flex w-full items-center gap-3 rounded-3xl p-4 text-left"}
-            >
-              {pending ? <span className="absolute right-3 top-3 h-3 w-3 rounded-full bg-secondary shadow-lg shadow-secondary/40" /> : null}
-              {claimBursts.includes(rewardId) ? <RewardClaimBurst /> : null}
-              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-muted text-primary">
-                <Trophy className="h-5 w-5" />
-              </div>
-              <div className="flex min-w-0 flex-1 items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="break-words font-black">{reward.name}</h2>
-                  {statusLabel(status) ? (
-                    <div className={pending ? "mt-1 text-xs font-black text-secondary" : "mt-1 text-xs font-bold text-muted-foreground"}>{statusLabel(status)}</div>
-                  ) : null}
-                </div>
-                {preview ? (
-                  <span
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setSelectedReward(preview);
-                    }}
-                    className="shrink-0 rounded-2xl outline-none transition-transform hover:scale-105"
-                    aria-label={`Preview ${reward.name} reward`}
+              <div
+                key={reward.id}
+                className={pending ? "neon-card relative w-full rounded-3xl border-secondary/70 p-4 shadow-xl shadow-secondary/10" : "neon-card relative w-full rounded-3xl p-4"}
+              >
+                {pending ? <span className="absolute left-3 top-3 h-3 w-3 rounded-full bg-secondary shadow-lg shadow-secondary/40" /> : null}
+                {claimBursts.includes(rewardId) ? <RewardClaimBurst /> : null}
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedRewardId(expanded ? null : reward.id)}
+                    className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    aria-expanded={expanded}
+                    aria-label={`${expanded ? "Hide" : "Show"} details for ${reward.description}`}
                   >
-                    <CharacterRewardPreview config={preview.config} />
-                  </span>
-                ) : (
-                  <div className="shrink-0 text-xs font-black text-secondary">{reward.reward}</div>
-                )}
+                    <RewardRequirementIcons reward={reward} />
+                    <div className="min-w-0 flex-1">
+                      <div className={pending ? "text-xs font-black text-secondary" : "text-xs font-bold text-muted-foreground"}>
+                        {statusLabel(status) || "View details"}
+                      </div>
+                    </div>
+                    <ChevronDown className={expanded ? "h-5 w-5 shrink-0 rotate-180 text-muted-foreground transition-transform" : "h-5 w-5 shrink-0 text-muted-foreground transition-transform"} />
+                  </button>
+                  {preview ? (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedReward(preview)}
+                      className="shrink-0 rounded-2xl outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-primary"
+                      aria-label={`Preview reward for ${reward.description}`}
+                    >
+                      <CharacterRewardPreview config={preview.config} />
+                    </button>
+                  ) : (
+                    <div className="shrink-0 text-xs font-black text-secondary">{reward.reward}</div>
+                  )}
+                </div>
+
+                <div className={expanded ? "grid grid-rows-[1fr] transition-all duration-300 ease-out" : "grid grid-rows-[0fr] transition-all duration-300 ease-out"}>
+                  <div className="overflow-hidden">
+                    <div className={expanded ? "mt-4 border-t border-white/10 pt-4 opacity-100 transition-opacity delay-100" : "opacity-0 transition-opacity"}>
+                      <h2 className="break-words font-black">{reward.description}</h2>
+                      <div className="mt-3 space-y-3">
+                        {progressItems.map((progress) => {
+                          const remaining = Math.max(0, progress.target - progress.current);
+                          const percent = progress.target > 0 ? Math.min(100, (progress.current / progress.target) * 100) : 0;
+                          const progressStatus = progress.target === 0 ? "Add a task" : remaining > 0 ? `${remaining} left` : "Complete";
+
+                          return (
+                            <div key={progress.label}>
+                              <div className="mb-1.5 flex items-start justify-between gap-3 text-xs font-bold">
+                                <span className="text-muted-foreground">{progress.label}</span>
+                                <span className="shrink-0 text-secondary">
+                                  {progress.current}/{progress.target} {progress.unit} · {progressStatus}
+                                </span>
+                              </div>
+                              <div className="h-2 overflow-hidden rounded-full bg-background">
+                                <div
+                                  className="h-full rounded-full bg-gradient-to-r from-primary to-secondary transition-all duration-500 ease-out"
+                                  style={{ width: `${percent}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {pending ? (
+                        <Button type="button" className="mt-4 w-full" onClick={() => claimReward(rewardId, reward.xp ?? 0)}>
+                          Claim reward
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </button>
-          );
+            );
           })}
 
           {visibleRewardCount < rewardRows.length ? (

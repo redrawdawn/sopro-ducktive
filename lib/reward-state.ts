@@ -1,6 +1,6 @@
 import { avatarLevelRewards } from "@/lib/avatar";
 import { getLevelSnapshot } from "@/lib/levels";
-import { getStoredTaskTag } from "@/lib/task-tags";
+import { getStoredTaskTag, getTaskTagLabel, type TaskTag } from "@/lib/task-tags";
 
 export const CLAIMED_REWARDS_KEY = "sopro-ducktive-claimed-rewards-v1";
 
@@ -17,21 +17,42 @@ export type RewardDailyState = {
   totalXp?: number;
 };
 
+type GeneralRewardCriterion =
+  | { kind: "daily-all" }
+  | { kind: "any-task-streak"; days: number }
+  | { kind: "tag-streak"; tags: TaskTag[]; days: number }
+  | { kind: "simultaneous-task-streak"; taskCount: number; days: number };
+
+export type GeneralRewardDefinition = {
+  id: string;
+  description: string;
+  criterion: GeneralRewardCriterion;
+};
+
+export type GeneralRewardProgressItem = {
+  label: string;
+  current: number;
+  target: number;
+  unit: "days" | "tasks";
+};
+
+export const generalRewardDefinitions: GeneralRewardDefinition[] = [
+  { id: "daily-all", description: "Complete all your daily tasks", criterion: { kind: "daily-all" } },
+  { id: "streak-7", description: "Get a 7 day streak on any task", criterion: { kind: "any-task-streak", days: 7 } },
+  { id: "streak-30", description: "Get a 30 day streak on any task", criterion: { kind: "any-task-streak", days: 30 } },
+  { id: "sleep-30-total", description: "Get a 21 day Wake up streak", criterion: { kind: "tag-streak", tags: ["wake-up"], days: 21 } },
+  { id: "run-40-total", description: "Have a Workout and Run streak of 14 or more", criterion: { kind: "tag-streak", tags: ["workout", "run"], days: 14 } },
+  { id: "workout-run-7", description: "Have a Workout, Run, and Meditate streak of 5 or more", criterion: { kind: "tag-streak", tags: ["workout", "run", "meditate"], days: 5 } },
+  { id: "five-daily-7", description: "Have a streak of 7 or more on any 5 tasks at one time", criterion: { kind: "simultaneous-task-streak", taskCount: 5, days: 7 } }
+];
+
 export const generalRewardXp: Record<string, number> = {
   "reward:daily-all": 5,
   "reward:streak-7": 50,
   "reward:streak-30": 500
 };
 
-const generalRewardIds = [
-  "reward:daily-all",
-  "reward:streak-7",
-  "reward:streak-30",
-  "reward:sleep-30-total",
-  "reward:run-40-total",
-  "reward:workout-run-7",
-  "reward:five-daily-7"
-];
+const generalRewardIds = generalRewardDefinitions.map((reward) => `reward:${reward.id}`);
 
 const medalThresholds: Array<{ tag: string; tier: "Bronze" | "Silver" | "Gold"; completions: number }> = [
   { tag: "run", tier: "Bronze", completions: 7 },
@@ -104,43 +125,92 @@ export function getRewardTagTotals(state: RewardDailyState) {
   }, {});
 }
 
+function getBestTaskStreak(state: RewardDailyState) {
+  const tasks = Array.isArray(state.tasks) ? state.tasks : [];
+  return Math.max(0, ...tasks.map((task) => getLongestRewardStreak(task.id ? state.completionDatesByTask?.[task.id] ?? [] : [])));
+}
+
+function getMaxSimultaneousTaskStreakCount(state: RewardDailyState, requiredDays: number) {
+  const tasks = Array.isArray(state.tasks) ? state.tasks : [];
+  const qualifyingTasksByDate = new Map<string, number>();
+
+  for (const task of tasks) {
+    if (!task.id) {
+      continue;
+    }
+
+    const sortedDates = Array.from(new Set(state.completionDatesByTask?.[task.id] ?? [])).sort();
+    let consecutiveDays = 0;
+    let previousDate: string | null = null;
+
+    for (const date of sortedDates) {
+      consecutiveDays = previousDate && daysBetween(previousDate, date) === 1 ? consecutiveDays + 1 : 1;
+      if (consecutiveDays >= requiredDays) {
+        qualifyingTasksByDate.set(date, (qualifyingTasksByDate.get(date) ?? 0) + 1);
+      }
+      previousDate = date;
+    }
+  }
+
+  return Math.max(0, ...qualifyingTasksByDate.values());
+}
+
+export function getGeneralRewardProgress(id: string, state: RewardDailyState): GeneralRewardProgressItem[] {
+  const reward = generalRewardDefinitions.find((item) => item.id === id.replace(/^reward:/, ""));
+  if (!reward) {
+    return [];
+  }
+  const criterion = reward.criterion;
+
+  if (criterion.kind === "daily-all") {
+    const tasks = Array.isArray(state.tasks) ? state.tasks.filter((task) => task.id) : [];
+    const completedTaskIds = new Set(Array.isArray(state.completedTaskIds) ? state.completedTaskIds : []);
+    return [{
+      label: "Daily tasks completed",
+      current: tasks.filter((task) => task.id && completedTaskIds.has(task.id)).length,
+      target: tasks.length,
+      unit: "tasks"
+    }];
+  }
+
+  if (criterion.kind === "any-task-streak") {
+    return [{
+      label: "Best task streak",
+      current: getBestTaskStreak(state),
+      target: criterion.days,
+      unit: "days"
+    }];
+  }
+
+  if (criterion.kind === "tag-streak") {
+    const tagStreaks = getRewardTagStreaks(state);
+    return criterion.tags.map((tag) => ({
+      label: `${getTaskTagLabel(tag) ?? tag} streak`,
+      current: tagStreaks[tag] ?? 0,
+      target: criterion.days,
+      unit: "days"
+    }));
+  }
+
+  return [{
+    label: `Tasks with a ${criterion.days}+ day streak at one time`,
+    current: getMaxSimultaneousTaskStreakCount(state, criterion.days),
+    target: criterion.taskCount,
+    unit: "tasks"
+  }];
+}
+
 export function getClaimedRewardXp(id: string) {
   return generalRewardXp[id] ?? 0;
 }
 
 export function isRewardClaimEligible(id: string, state: RewardDailyState) {
-  const tasks = Array.isArray(state.tasks) ? state.tasks : [];
-  const completedTaskIds = Array.isArray(state.completedTaskIds) ? state.completedTaskIds : [];
-  const tagStreaks = getRewardTagStreaks(state);
   const tagTotals = getRewardTagTotals(state);
-  const bestStreak = Math.max(0, ...Object.values(tagStreaks));
+  const generalReward = generalRewardDefinitions.find((reward) => `reward:${reward.id}` === id);
 
-  if (id === "reward:daily-all") {
-    return tasks.length > 0 && completedTaskIds.length >= tasks.length;
-  }
-
-  if (id === "reward:streak-7") {
-    return bestStreak >= 7;
-  }
-
-  if (id === "reward:streak-30") {
-    return bestStreak >= 30;
-  }
-
-  if (id === "reward:sleep-30-total") {
-    return (tagTotals["wake-up"] ?? 0) >= 30;
-  }
-
-  if (id === "reward:run-40-total") {
-    return (tagTotals.run ?? 0) >= 40;
-  }
-
-  if (id === "reward:workout-run-7") {
-    return (tagStreaks.workout ?? 0) >= 7 && (tagStreaks.run ?? 0) >= 7;
-  }
-
-  if (id === "reward:five-daily-7") {
-    return tasks.filter((task) => task.id && getLongestRewardStreak(state.completionDatesByTask?.[task.id] ?? []) >= 7).length >= 5;
+  if (generalReward) {
+    const progress = getGeneralRewardProgress(generalReward.id, state);
+    return progress.length > 0 && progress.every((item) => item.target > 0 && item.current >= item.target);
   }
 
   if (id.startsWith("level:")) {
