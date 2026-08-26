@@ -3,6 +3,7 @@
 import { getLevelSnapshot } from "@/lib/levels";
 import { createClient } from "@/lib/supabase/client";
 import { getStoredAvatarConfig, normalizeAvatarConfig, type AvatarConfig } from "@/lib/avatar";
+import { getStoredTaskTag } from "@/lib/task-tags";
 
 const DAILY_STORAGE_KEY = "sopro-ducktive-daily-v1";
 const CLAIMED_REWARDS_KEY = "sopro-ducktive-claimed-rewards-v1";
@@ -11,6 +12,7 @@ export const PUBLIC_PROFILE_NAME_KEY = "motive-public-profile-name";
 
 type StoredTask = {
   id?: string;
+  title?: string;
   icon?: string;
 };
 
@@ -123,12 +125,13 @@ function buildMedals(state: StoredDailyState) {
   const completionDatesByTask =
     state.completionDatesByTask && typeof state.completionDatesByTask === "object" ? state.completionDatesByTask : {};
   const tagStreaks = tasks.reduce<Record<string, number>>((streaks, task) => {
-    if (!task.id || !task.icon) return streaks;
-    streaks[task.icon] = Math.max(streaks[task.icon] ?? 0, getLongestStreak(completionDatesByTask[task.id] ?? []));
+    const tag = getStoredTaskTag(task);
+    if (!task.id || !tag) return streaks;
+    streaks[tag] = Math.max(streaks[tag] ?? 0, getLongestStreak(completionDatesByTask[task.id] ?? []));
     return streaks;
   }, {});
 
-  return ["workout", "book", "run", "sleep", "mind"].flatMap<PublicProfileMedal>((tag) => {
+  return ["workout", "read", "run", "wake-up", "meditate"].flatMap<PublicProfileMedal>((tag) => {
     const streak = tagStreaks[tag] ?? 0;
     if (streak >= 60) return [{ tag, tier: "Gold" as const }];
     if (streak >= 30) return [{ tag, tier: "Silver" as const }];

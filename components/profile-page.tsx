@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Award, Bed, BookOpen, Brain, CheckCircle2, Dumbbell, Flame, Footprints, Globe2, Pencil, Search, type LucideIcon } from "lucide-react";
+import { Award, BookOpen, Brain, CheckCircle2, Dumbbell, Flame, Footprints, Globe2, Pencil, Search, Sun, type LucideIcon } from "lucide-react";
 import { getLevelSnapshot } from "@/lib/levels";
 import {
   getStoredPublicDisplayName,
@@ -28,10 +28,10 @@ type StoredDailyState = {
 const STORAGE_KEY = "sopro-ducktive-daily-v1";
 
 const medalIcons: Record<string, LucideIcon> = {
-  book: BookOpen,
-  mind: Brain,
+  read: BookOpen,
+  meditate: Brain,
   run: Footprints,
-  sleep: Bed,
+  "wake-up": Sun,
   workout: Dumbbell
 };
 

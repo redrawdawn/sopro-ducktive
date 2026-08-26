@@ -3,40 +3,19 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  Bed,
-  Bike,
   BookOpen,
   Brain,
   BriefcaseBusiness,
-  CalendarCheck,
-  Car,
   Check,
-  Coffee,
-  Droplets,
   Dumbbell,
   Flame,
   Footprints,
-  GraduationCap,
-  Hammer,
-  HandHeart,
-  Heart,
-  Home,
-  Laptop,
   Leaf,
   Moon,
-  Music,
   Pencil,
-  PiggyBank,
-  Pill,
   Plus,
-  ShoppingCart,
-  Sparkles,
-  Star,
   Sun,
   Trash2,
-  Utensils,
-  Wallet,
-  WashingMachine,
   X
 } from "lucide-react";
 import { getLevelSnapshot } from "@/lib/levels";
@@ -59,12 +38,13 @@ import { AvatarCharacter } from "@/components/avatar-character";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { XpProgressBar } from "@/components/xp-progress-bar";
+import { getTaskTagLabel, inferTaskTag, type TaskTag } from "@/lib/task-tags";
 import { APP_VERSION } from "@/lib/version";
 
 type DailyTask = {
   id: string;
   title: string;
-  icon?: string;
+  icon?: TaskTag;
   subtasks?: DailySubtask[];
 };
 
@@ -85,7 +65,7 @@ type DailyState = {
 type CycleTask = {
   id: string;
   title: string;
-  icon?: string;
+  icon?: TaskTag;
   createdDate: string;
 };
 
@@ -115,94 +95,27 @@ const taskTabs: Array<{ id: TaskTab; label: string }> = [
 ];
 
 const taskIcons = [
-  { id: "book", label: "Book", icon: BookOpen },
-  { id: "write", label: "Write", icon: Pencil },
-  { id: "pray", label: "Pray", icon: HandHeart },
   { id: "workout", label: "Workout", icon: Dumbbell },
   { id: "run", label: "Run", icon: Footprints },
-  { id: "food", label: "Food", icon: Utensils },
-  { id: "home", label: "Home", icon: Home },
-  { id: "clean", label: "Clean", icon: Sparkles },
-  { id: "shower", label: "Shower", icon: Sparkles },
-  { id: "health", label: "Health", icon: Heart },
-  { id: "sleep", label: "Sleep", icon: Bed },
-  { id: "bike", label: "Bike", icon: Bike },
-  { id: "mind", label: "Mind", icon: Brain },
-  { id: "work", label: "Work", icon: BriefcaseBusiness },
-  { id: "plan", label: "Plan", icon: CalendarCheck },
-  { id: "drive", label: "Drive", icon: Car },
-  { id: "coffee", label: "Coffee", icon: Coffee },
-  { id: "water", label: "Water", icon: Droplets },
-  { id: "study", label: "Study", icon: GraduationCap },
-  { id: "project", label: "Project", icon: Hammer },
-  { id: "computer", label: "Computer", icon: Laptop },
-  { id: "outside", label: "Outside", icon: Leaf },
-  { id: "music", label: "Music", icon: Music },
-  { id: "money", label: "Money", icon: PiggyBank },
-  { id: "medicine", label: "Medicine", icon: Pill },
-  { id: "shopping", label: "Shopping", icon: ShoppingCart },
-  { id: "goal", label: "Goal", icon: Star },
-  { id: "budget", label: "Budget", icon: Wallet },
-  { id: "laundry", label: "Laundry", icon: WashingMachine }
-];
+  { id: "read", label: "Read", icon: BookOpen },
+  { id: "wake-up", label: "Wake up", icon: Sun },
+  { id: "meditate", label: "Meditate", icon: Brain },
+  { id: "garden", label: "Garden", icon: Leaf },
+  { id: "work", label: "Work", icon: BriefcaseBusiness }
+] satisfies Array<{ id: TaskTag; label: string; icon: typeof Dumbbell }>;
 
 const suggestedTasks = [
   { title: "Workout", icon: Dumbbell },
   { title: "Run", icon: Footprints },
-  { title: "Walk", icon: Footprints },
-  { title: "Garden", icon: Leaf },
   { title: "Read", icon: BookOpen },
-  { title: "Write", icon: Pencil },
-  { title: "Pray", icon: HandHeart },
-  { title: "Clean", icon: Sparkles },
-  { title: "Wake up early", icon: Bed }
+  { title: "Wake up", icon: Sun },
+  { title: "Meditate", icon: Brain },
+  { title: "Garden", icon: Leaf },
+  { title: "Work", icon: BriefcaseBusiness }
 ];
 
-function getTaskIcon(iconId?: string) {
+function getTaskIcon(iconId?: TaskTag) {
   return taskIcons.find((icon) => icon.id === iconId);
-}
-
-function getTaskTagLabel(iconId?: string) {
-  const labels: Record<string, string> = {
-    workout: "workout",
-    book: "book",
-    run: "run",
-    outside: "nature",
-    shower: "clean",
-    clean: "clean",
-    laundry: "clean",
-    mind: "mind"
-  };
-
-  return iconId ? labels[iconId] : undefined;
-}
-
-function inferTaskIcon(title: string) {
-  const normalized = title.toLowerCase();
-  const iconRules = [
-    { icon: "pray", words: ["pray", "prayer"] },
-    { icon: "write", words: ["write", "writing", "journal"] },
-    { icon: "mind", words: ["study", "meditate", "meditation"] },
-    { icon: "book", words: ["read", "bible", "book", "chapter", "devotional"] },
-    { icon: "run", words: ["run", "jog", "sprint", "walk", "cardio"] },
-    { icon: "workout", words: ["workout", "exercise", "gym", "lift", "arms", "legs", "chest"] },
-    { icon: "food", words: ["cook", "eat", "meal", "food", "breakfast", "lunch", "dinner"] },
-    { icon: "shower", words: ["clean", "wash", "bath", "shower"] },
-    { icon: "clean", words: ["sweep", "vacuum", "dust"] },
-    { icon: "laundry", words: ["laundry", "wash clothes"] },
-    { icon: "health", words: ["health", "doctor", "heart"] },
-    { icon: "sleep", words: ["sleep", "wake up", "bed"] },
-    { icon: "water", words: ["drink", "water", "hydrate", "h2o"] },
-    { icon: "outside", words: ["outside", "woods", "hike", "garden"] },
-    { icon: "money", words: ["money", "save"] },
-    { icon: "budget", words: ["budget", "bills", "pay"] },
-    { icon: "shopping", words: ["shop", "store", "groceries"] },
-    { icon: "music", words: ["music", "practice"] },
-    { icon: "home", words: ["home", "house"] },
-    { icon: "work", words: ["work", "job"] }
-  ];
-
-  return iconRules.find((rule) => rule.words.some((word) => normalized.includes(word)))?.icon;
 }
 
 function localDateKey(date = new Date()) {
@@ -325,7 +238,7 @@ function normalizeDailyTask(value: unknown): DailyTask | null {
   return {
     id: task.id,
     title: task.title,
-    icon: typeof task.icon === "string" ? task.icon : undefined,
+    icon: inferTaskTag(task.title),
     subtasks: Array.isArray(task.subtasks)
       ? task.subtasks
           .map((subtask) => {
@@ -348,7 +261,7 @@ function normalizeCycleTask(value: unknown): CycleTask | null {
   return {
     id: task.id,
     title: task.title,
-    icon: typeof task.icon === "string" ? task.icon : undefined,
+    icon: inferTaskTag(task.title),
     createdDate: typeof task.createdDate === "string" ? task.createdDate : todayKey()
   };
 }
@@ -861,7 +774,7 @@ export function DailyDashboard() {
 
     setDailyState((current) => ({
       ...current,
-      tasks: [...current.tasks, { id: createId(), title, icon: inferTaskIcon(title) }]
+      tasks: [...current.tasks, { id: createId(), title, icon: inferTaskTag(title) }]
     }));
     setNewTaskTitle("");
     setShowAddForm(false);
@@ -870,7 +783,7 @@ export function DailyDashboard() {
   function addCycleTask(tab: CycleTab, title: string) {
     setCycleState((current) => ({
       ...current,
-      [tab]: [...current[tab], { id: createId(), title, icon: inferTaskIcon(title), createdDate: todayKey() }]
+      [tab]: [...current[tab], { id: createId(), title, icon: inferTaskTag(title), createdDate: todayKey() }]
     }));
     setNewTaskTitle("");
     setShowAddForm(false);
@@ -1045,7 +958,7 @@ export function DailyDashboard() {
           ? {
               ...task,
               title,
-              icon: inferTaskIcon(title),
+              icon: inferTaskTag(title),
               subtasks: (task.subtasks ?? []).map((subtask) => ({
                 ...subtask,
                 title: (editSubtaskTitles[subtask.id] ?? subtask.title).trim() || subtask.title

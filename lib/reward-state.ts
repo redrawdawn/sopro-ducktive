@@ -1,10 +1,12 @@
 import { avatarLevelRewards } from "@/lib/avatar";
 import { getLevelSnapshot } from "@/lib/levels";
+import { getStoredTaskTag } from "@/lib/task-tags";
 
 export const CLAIMED_REWARDS_KEY = "sopro-ducktive-claimed-rewards-v1";
 
 export type RewardStateTask = {
   id?: string;
+  title?: string;
   icon?: string;
 };
 
@@ -38,15 +40,15 @@ const medalThresholds: Array<{ tag: string; tier: "Bronze" | "Silver" | "Gold"; 
   { tag: "workout", tier: "Bronze", days: 7 },
   { tag: "workout", tier: "Silver", days: 30 },
   { tag: "workout", tier: "Gold", days: 60 },
-  { tag: "sleep", tier: "Bronze", days: 7 },
-  { tag: "sleep", tier: "Silver", days: 30 },
-  { tag: "sleep", tier: "Gold", days: 60 },
-  { tag: "book", tier: "Bronze", days: 7 },
-  { tag: "book", tier: "Silver", days: 30 },
-  { tag: "book", tier: "Gold", days: 60 },
-  { tag: "mind", tier: "Bronze", days: 7 },
-  { tag: "mind", tier: "Silver", days: 30 },
-  { tag: "mind", tier: "Gold", days: 60 }
+  { tag: "wake-up", tier: "Bronze", days: 7 },
+  { tag: "wake-up", tier: "Silver", days: 30 },
+  { tag: "wake-up", tier: "Gold", days: 60 },
+  { tag: "read", tier: "Bronze", days: 7 },
+  { tag: "read", tier: "Silver", days: 30 },
+  { tag: "read", tier: "Gold", days: 60 },
+  { tag: "meditate", tier: "Bronze", days: 7 },
+  { tag: "meditate", tier: "Silver", days: 30 },
+  { tag: "meditate", tier: "Gold", days: 60 }
 ];
 
 function daysBetween(startDateKey: string, endDateKey: string) {
@@ -76,11 +78,12 @@ export function getRewardTagStreaks(state: RewardDailyState) {
     state.completionDatesByTask && typeof state.completionDatesByTask === "object" ? state.completionDatesByTask : {};
 
   return tasks.reduce<Record<string, number>>((streaks, task) => {
-    if (!task.id || !task.icon) {
+    const tag = getStoredTaskTag(task);
+    if (!task.id || !tag) {
       return streaks;
     }
 
-    streaks[task.icon] = Math.max(streaks[task.icon] ?? 0, getLongestRewardStreak(completionDatesByTask[task.id] ?? []));
+    streaks[tag] = Math.max(streaks[tag] ?? 0, getLongestRewardStreak(completionDatesByTask[task.id] ?? []));
     return streaks;
   }, {});
 }
@@ -91,11 +94,12 @@ export function getRewardTagTotals(state: RewardDailyState) {
     state.completionDatesByTask && typeof state.completionDatesByTask === "object" ? state.completionDatesByTask : {};
 
   return tasks.reduce<Record<string, number>>((totals, task) => {
-    if (!task.id || !task.icon) {
+    const tag = getStoredTaskTag(task);
+    if (!task.id || !tag) {
       return totals;
     }
 
-    totals[task.icon] = (totals[task.icon] ?? 0) + (completionDatesByTask[task.id]?.length ?? 0);
+    totals[tag] = (totals[tag] ?? 0) + (completionDatesByTask[task.id]?.length ?? 0);
     return totals;
   }, {});
 }
@@ -124,7 +128,7 @@ export function isRewardClaimEligible(id: string, state: RewardDailyState) {
   }
 
   if (id === "reward:sleep-30-total") {
-    return (tagTotals.sleep ?? 0) >= 30;
+    return (tagTotals["wake-up"] ?? 0) >= 30;
   }
 
   if (id === "reward:run-40-total") {

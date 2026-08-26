@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { Bed, BookOpen, Brain, Dumbbell, Footprints, Lock, LockOpen, Medal, Trophy, X } from "lucide-react";
+import { BookOpen, Brain, Dumbbell, Footprints, Lock, LockOpen, Medal, Sun, Trophy, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { XpProgressBar } from "@/components/xp-progress-bar";
 import { backupMotiveState } from "@/lib/motive-backup";
@@ -47,6 +47,7 @@ type RewardsTab = "rewards" | "levels" | "medals";
 type AchievementStatus = "claimable" | "locked" | "unlocked";
 type DailyTask = {
   id: string;
+  title?: string;
   icon?: string;
 };
 type DailyState = {
@@ -76,7 +77,7 @@ type MedalTier = {
   reward: Omit<AvatarCosmeticReward, "level">;
 };
 type MedalSet = {
-  id: "run" | "workout" | "sleep" | "book" | "mind";
+  id: "run" | "workout" | "wake-up" | "read" | "meditate";
   label: string;
   Icon: typeof Footprints;
   tiers: MedalTier[];
@@ -86,7 +87,7 @@ const rewardRows: RewardRow[] = [
   { id: "daily-all", name: "Complete all your daily tasks", reward: "5 XP", xp: 5 },
   { id: "streak-7", name: "7 Day Streak", reward: "50 XP", xp: 50 },
   { id: "streak-30", name: "30 Day Streak", reward: "500 XP", xp: 500 },
-  { id: "sleep-30-total", name: "Complete a sleep task 30 times", cosmetic: { category: "Hair", part: "hair-wild.png" } },
+  { id: "sleep-30-total", name: "Complete a Wake up task 30 times", cosmetic: { category: "Hair", part: "hair-wild.png" } },
   { id: "run-40-total", name: "Go on 40 runs total", cosmetic: { category: "Hat", part: "hat-band.png" } },
   { id: "workout-run-7", name: "Have a workout and run streak of 7 or more at one time", cosmetic: { category: "Hat", part: "hat-ninja.png" } },
   { id: "five-daily-7", name: "Have a 7 day streak on 5 daily tasks at once", cosmetic: { category: "Hat", part: "hat-military.png" } }
@@ -114,9 +115,9 @@ const medalSets: MedalSet[] = [
     ]
   },
   {
-    id: "sleep",
-    label: "Sleep",
-    Icon: Bed,
+    id: "wake-up",
+    label: "Wake up",
+    Icon: Sun,
     tiers: [
       { tier: "Bronze", days: 7, color: "#8f4f22", reward: { category: "Face", part: "face-sleep.png" } },
       { tier: "Silver", days: 30, color: "#c0c0c0", reward: { category: "Face", part: "face-grumpy.png" } },
@@ -124,8 +125,8 @@ const medalSets: MedalSet[] = [
     ]
   },
   {
-    id: "book",
-    label: "Book",
+    id: "read",
+    label: "Read",
     Icon: BookOpen,
     tiers: [
       { tier: "Bronze", days: 7, color: "#8f4f22", reward: { category: "Face", part: "face-glasses.png" } },
@@ -134,8 +135,8 @@ const medalSets: MedalSet[] = [
     ]
   },
   {
-    id: "mind",
-    label: "Mind",
+    id: "meditate",
+    label: "Meditate",
     Icon: Brain,
     tiers: [
       { tier: "Bronze", days: 7, color: "#8f4f22", reward: { category: "Hat", part: "hat-arrow.png" } },
@@ -209,7 +210,11 @@ function loadDailyState(): DailyState {
     return {
       tasks: Array.isArray(parsed.tasks)
         ? parsed.tasks
-            .map((task) => ({ id: String(task.id), icon: typeof task.icon === "string" ? task.icon : undefined }))
+            .map((task) => ({
+              id: String(task.id),
+              title: typeof task.title === "string" ? task.title : undefined,
+              icon: typeof task.icon === "string" ? task.icon : undefined
+            }))
             .filter((task) => task.id)
         : [],
       completedTaskIds: Array.isArray(parsed.completedTaskIds)
