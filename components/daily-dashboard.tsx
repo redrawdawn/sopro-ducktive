@@ -38,7 +38,7 @@ import { AvatarCharacter } from "@/components/avatar-character";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { XpProgressBar } from "@/components/xp-progress-bar";
-import { getTaskTagLabel, inferTaskTag, type TaskTag } from "@/lib/task-tags";
+import { getStoredTaskTag, getTaskTagLabel, inferTaskTag, normalizeTaskTag, type TaskTag } from "@/lib/task-tags";
 import { APP_VERSION } from "@/lib/version";
 
 type DailyTask = {
@@ -59,6 +59,7 @@ type DailyState = {
   completedTaskIds: string[];
   completedSubtaskIdsByTask: Record<string, string[]>;
   completionDatesByTask: Record<string, string[]>;
+  completionTagsByTask: Record<string, TaskTag>;
   totalXp: number;
 };
 
@@ -229,6 +230,19 @@ function stringArrayRecord(value: unknown) {
   ) as Record<string, string[]>;
 }
 
+function taskTagRecord(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([taskId, tag]) => {
+      const normalizedTag = normalizeTaskTag(typeof tag === "string" ? tag : undefined);
+      return normalizedTag ? [[taskId, normalizedTag]] : [];
+    })
+  ) as Record<string, TaskTag>;
+}
+
 function normalizeDailyTask(value: unknown): DailyTask | null {
   const task = value as Partial<DailyTask> | null;
   if (!task || typeof task.id !== "string" || typeof task.title !== "string") {
@@ -268,11 +282,11 @@ function normalizeCycleTask(value: unknown): CycleTask | null {
 
 function loadState(): DailyState {
   if (typeof window === "undefined") {
-    return { tasks: [], completedDate: todayKey(), completedTaskIds: [], completedSubtaskIdsByTask: {}, completionDatesByTask: {}, totalXp: 0 };
+    return { tasks: [], completedDate: todayKey(), completedTaskIds: [], completedSubtaskIdsByTask: {}, completionDatesByTask: {}, completionTagsByTask: {}, totalXp: 0 };
   }
 
   const saved = window.localStorage.getItem(STORAGE_KEY);
-  const fallback: DailyState = { tasks: [], completedDate: todayKey(), completedTaskIds: [], completedSubtaskIdsByTask: {}, completionDatesByTask: {}, totalXp: 0 };
+  const fallback: DailyState = { tasks: [], completedDate: todayKey(), completedTaskIds: [], completedSubtaskIdsByTask: {}, completionDatesByTask: {}, completionTagsByTask: {}, totalXp: 0 };
 
   if (!saved) {
     return fallback;
@@ -287,6 +301,13 @@ function loadState(): DailyState {
     const completedTaskIds = stringArray(parsed.completedTaskIds);
     const completedSubtaskIdsByTask = stringArrayRecord(parsed.completedSubtaskIdsByTask);
     const completionDatesByTask = stringArrayRecord(parsed.completionDatesByTask);
+    const completionTagsByTask = tasks.reduce<Record<string, TaskTag>>((tags, task) => {
+      const tag = getStoredTaskTag(task);
+      if (tag) {
+        tags[task.id] = tag;
+      }
+      return tags;
+    }, taskTagRecord(parsed.completionTagsByTask));
 
     if (completedDate !== todayKey()) {
       const elapsedDays = Math.max(1, daysBetween(completedDate, todayKey()));
@@ -300,6 +321,7 @@ function loadState(): DailyState {
         completedTaskIds: [],
         completedSubtaskIdsByTask: {},
         completionDatesByTask,
+        completionTagsByTask,
         totalXp: Math.max(0, (Number(parsed.totalXp) || 0) - firstDayPenalty - additionalMissedDayPenalty)
       };
     }
@@ -310,6 +332,7 @@ function loadState(): DailyState {
       completedTaskIds,
       completedSubtaskIdsByTask,
       completionDatesByTask,
+      completionTagsByTask,
       totalXp: Number(parsed.totalXp) || 0
     };
   } catch {
@@ -385,6 +408,7 @@ export function DailyDashboard() {
     completedTaskIds: [],
     completedSubtaskIdsByTask: {},
     completionDatesByTask: {},
+    completionTagsByTask: {},
     totalXp: 0
   });
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -1003,6 +1027,8 @@ export function DailyDashboard() {
 
   function deleteTask(taskId: string) {
     setDailyState((current) => {
+      const task = current.tasks.find((item) => item.id === taskId);
+      const taskTag = task ? getStoredTaskTag(task) : undefined;
       const wasCompleted = current.completedTaskIds.includes(taskId);
 
       return {
@@ -1012,6 +1038,9 @@ export function DailyDashboard() {
         completedSubtaskIdsByTask: Object.fromEntries(
           Object.entries(current.completedSubtaskIdsByTask).filter(([id]) => id !== taskId)
         ),
+        completionTagsByTask: taskTag
+          ? { ...current.completionTagsByTask, [taskId]: taskTag }
+          : current.completionTagsByTask,
         totalXp: Math.max(0, current.totalXp - (wasCompleted ? 10 : 0))
       };
     });

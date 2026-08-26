@@ -24,6 +24,7 @@ type StoredState = {
   tasks?: StoredTask[];
   completedTaskIds?: string[];
   completionDatesByTask?: Record<string, string[]>;
+  completionTagsByTask?: Record<string, string>;
   totalXp?: number;
 };
 

@@ -1,6 +1,6 @@
 import { avatarLevelRewards } from "@/lib/avatar";
 import { getLevelSnapshot } from "@/lib/levels";
-import { getStoredTaskTag, getTaskTagLabel, type TaskTag } from "@/lib/task-tags";
+import { getStoredTaskTag, getTaskTagLabel, normalizeTaskTag, type TaskTag } from "@/lib/task-tags";
 
 export const CLAIMED_REWARDS_KEY = "sopro-ducktive-claimed-rewards-v1";
 export const RECURRING_REWARDS_KEY = "sopro-ducktive-recurring-rewards-v1";
@@ -17,6 +17,7 @@ export type RewardDailyState = {
   tasks?: RewardStateTask[];
   completedTaskIds?: string[];
   completionDatesByTask?: Record<string, string[]>;
+  completionTagsByTask?: Record<string, string>;
   totalXp?: number;
 };
 
@@ -25,7 +26,8 @@ type GeneralRewardCriterion =
   | { kind: "tag-streak"; tags: TaskTag[]; days: number }
   | { kind: "simultaneous-task-streak"; taskCount: number; days: number }
   | { kind: "total-task-completions"; count: number }
-  | { kind: "daily-task-completions"; count: number };
+  | { kind: "daily-task-completions"; count: number }
+  | { kind: "tag-completions"; tags: TaskTag[]; count: number };
 
 export type GeneralRewardDefinition = {
   id: string;
@@ -46,8 +48,12 @@ export const generalRewardDefinitions: GeneralRewardDefinition[] = [
   { id: "daily-tasks-5", description: "Complete 5 tasks in one day", criterion: { kind: "daily-task-completions", count: 5 }, recurring: true },
   { id: "tasks-total-50", description: "Complete 50 tasks in total", criterion: { kind: "total-task-completions", count: 50 } },
   { id: "tasks-total-100", description: "Complete 100 tasks in total", criterion: { kind: "total-task-completions", count: 100 } },
+  { id: "tasks-total-1000", description: "Complete 1,000 tasks in total", criterion: { kind: "total-task-completions", count: 1000 } },
+  { id: "all-tags-20", description: "Complete 20 of each task: Workout, Run, Read, Wake up, Meditate, Garden, Work", criterion: { kind: "tag-completions", tags: ["workout", "run", "read", "wake-up", "meditate", "garden", "work"], count: 20 } },
   { id: "streak-7", description: "Get a 7 day streak on any task", criterion: { kind: "any-task-streak", days: 7 } },
   { id: "streak-30", description: "Get a 30 day streak on any task", criterion: { kind: "any-task-streak", days: 30 } },
+  { id: "wake-read-garden-5", description: "Have a 5 day streak of Wake up, Read, and Garden", criterion: { kind: "tag-streak", tags: ["wake-up", "read", "garden"], days: 5 } },
+  { id: "wake-workout-run-14", description: "Have a 14 day streak of Wake up, Workout, and Run", criterion: { kind: "tag-streak", tags: ["wake-up", "workout", "run"], days: 14 } },
   { id: "sleep-30-total", description: "Get a 21 day Wake up streak", criterion: { kind: "tag-streak", tags: ["wake-up"], days: 21 } },
   { id: "run-40-total", description: "Have a Workout and Run streak of 14 or more", criterion: { kind: "tag-streak", tags: ["workout", "run"], days: 14 } },
   { id: "workout-run-7", description: "Have a Workout, Run, and Meditate streak of 5 or more", criterion: { kind: "tag-streak", tags: ["workout", "run", "meditate"], days: 5 } },
@@ -59,8 +65,12 @@ export const generalRewardXp: Record<string, number> = {
   "reward:daily-tasks-5": 10,
   "reward:tasks-total-50": 50,
   "reward:tasks-total-100": 100,
+  "reward:tasks-total-1000": 1000,
+  "reward:all-tags-20": 150,
   "reward:streak-7": 50,
-  "reward:streak-30": 500
+  "reward:streak-30": 500,
+  "reward:wake-read-garden-5": 30,
+  "reward:wake-workout-run-14": 50
 };
 
 const generalRewardIds = generalRewardDefinitions.map((reward) => `reward:${reward.id}`);
@@ -125,14 +135,18 @@ export function getRewardTagTotals(state: RewardDailyState) {
   const tasks = Array.isArray(state.tasks) ? state.tasks : [];
   const completionDatesByTask =
     state.completionDatesByTask && typeof state.completionDatesByTask === "object" ? state.completionDatesByTask : {};
+  const tasksById = new Map(tasks.filter((task) => task.id).map((task) => [task.id as string, task]));
 
-  return tasks.reduce<Record<string, number>>((totals, task) => {
-    const tag = getStoredTaskTag(task);
-    if (!task.id || !tag) {
+  return Object.entries(completionDatesByTask).reduce<Record<string, number>>((totals, [taskId, dates]) => {
+    const currentTask = tasksById.get(taskId);
+    const tag = currentTask
+      ? getStoredTaskTag(currentTask)
+      : normalizeTaskTag(state.completionTagsByTask?.[taskId]);
+    if (!tag) {
       return totals;
     }
 
-    totals[tag] = (totals[tag] ?? 0) + (completionDatesByTask[task.id]?.length ?? 0);
+    totals[tag] = (totals[tag] ?? 0) + new Set(Array.isArray(dates) ? dates : []).size;
     return totals;
   }, {});
 }
@@ -218,6 +232,16 @@ export function getGeneralRewardProgress(
       current: tagStreaks[tag] ?? 0,
       target: criterion.days,
       unit: "days"
+    }));
+  }
+
+  if (criterion.kind === "tag-completions") {
+    const tagTotals = getRewardTagTotals(state);
+    return criterion.tags.map((tag) => ({
+      label: `${getTaskTagLabel(tag) ?? tag} tasks completed`,
+      current: tagTotals[tag] ?? 0,
+      target: criterion.count,
+      unit: "tasks"
     }));
   }
 

@@ -107,6 +107,9 @@ const avatarUnlockHints: Record<string, string> = {
   "hat-band.png": "have a Workout and Run streak of 14 or more",
   "hat-ninja.png": "have a Workout, Run, and Meditate streak of 5 or more",
   "hat-military.png": "have a streak of 7 or more on any 5 tasks at one time",
+  "hat-adventure.png": "complete 20 Workout, Run, Read, Wake up, Meditate, Garden, and Work tasks",
+  "face-sad.png": "have a 5 day streak of Wake up, Read, and Garden",
+  "face-cool.png": "have a 14 day streak of Wake up, Workout, and Run",
   ...Object.fromEntries(avatarLevelRewards.map((reward) => [reward.part, `unlocks at level ${reward.level}`]))
 };
 
@@ -115,6 +118,9 @@ const avatarPartRewardIds: Record<string, string> = {
   "hat-band.png": "reward:run-40-total",
   "hat-ninja.png": "reward:workout-run-7",
   "hat-military.png": "reward:five-daily-7",
+  "hat-adventure.png": "reward:all-tags-20",
+  "face-sad.png": "reward:wake-read-garden-5",
+  "face-cool.png": "reward:wake-workout-run-14",
   "legs-insect.png": "medal:run:Bronze",
   "legs-four.png": "medal:run:Silver",
   "legs-spider.png": "medal:run:Gold",

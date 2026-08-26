@@ -55,7 +55,7 @@ import {
   type AvatarCosmeticReward
 } from "@/lib/avatar";
 import { getLevelSnapshot } from "@/lib/levels";
-import { getTaskTagLabel, type TaskTag } from "@/lib/task-tags";
+import { getTaskTagLabel, normalizeTaskTag, type TaskTag } from "@/lib/task-tags";
 
 const STORAGE_KEY = "sopro-ducktive-daily-v1";
 const LEVEL_REWARD_BATCH_SIZE = 5;
@@ -82,6 +82,7 @@ type DailyState = {
   tasks: DailyTask[];
   completedTaskIds: string[];
   completionDatesByTask: Record<string, string[]>;
+  completionTagsByTask: Record<string, string>;
   totalXp: number;
 } & RewardDailyState;
 type RewardPreview = {
@@ -110,6 +111,9 @@ type MedalSet = {
 };
 
 const rewardCosmetics: Record<string, Omit<AvatarCosmeticReward, "level">> = {
+  "all-tags-20": { category: "Hat", part: "hat-adventure.png" },
+  "wake-read-garden-5": { category: "Face", part: "face-sad.png" },
+  "wake-workout-run-14": { category: "Face", part: "face-cool.png" },
   "sleep-30-total": { category: "Hair", part: "hair-wild.png" },
   "run-40-total": { category: "Hat", part: "hat-band.png" },
   "workout-run-7": { category: "Hat", part: "hat-ninja.png" },
@@ -120,7 +124,7 @@ const rewardRows: RewardRow[] = generalRewardDefinitions.map((reward) => {
   const xp = generalRewardXp[`reward:${reward.id}`] ?? 0;
   return {
     ...reward,
-    reward: xp > 0 ? `${xp} XP` : undefined,
+    reward: xp > 0 ? `${xp.toLocaleString()} XP` : undefined,
     xp: xp > 0 ? xp : undefined,
     cosmetic: rewardCosmetics[reward.id]
   };
@@ -218,9 +222,10 @@ const rewardTagIcons: Record<TaskTag, LucideIcon> = {
 
 function RewardRequirementIcons({ reward }: { reward: GeneralRewardDefinition }) {
   const criterion = reward.criterion;
-  const tags = criterion.kind === "tag-streak" ? criterion.tags : [];
+  const tags = criterion.kind === "tag-streak" || criterion.kind === "tag-completions" ? criterion.tags : [];
   const streakDays = "days" in criterion ? criterion.days : null;
   const completionCount = "count" in criterion ? criterion.count : null;
+  const compactTags = tags.length > 3;
 
   return (
     <div className="flex shrink-0 items-center gap-1.5" aria-label={`Requirement icons for ${reward.description}`}>
@@ -233,18 +238,26 @@ function RewardRequirementIcons({ reward }: { reward: GeneralRewardDefinition })
       {completionCount !== null ? (
         <span className="flex h-10 min-w-10 items-center justify-center gap-1 rounded-2xl bg-primary/10 px-2 text-primary" title={`${completionCount} task completions`}>
           <CheckCircle2 className="h-5 w-5" />
-          <span className="text-sm font-black">{completionCount}</span>
+          <span className="text-sm font-black">{completionCount.toLocaleString()}</span>
         </span>
       ) : null}
-      {tags.map((tag) => {
-        const TagIcon = rewardTagIcons[tag];
-        const label = getTaskTagLabel(tag) ?? tag;
-        return (
-          <span key={tag} className="grid h-10 w-10 place-items-center rounded-2xl bg-muted text-primary" title={`${label} tag`}>
-            <TagIcon className="h-5 w-5" />
-          </span>
-        );
-      })}
+      {tags.length > 0 ? (
+        <div className={compactTags ? "grid grid-cols-4 gap-1 rounded-2xl bg-muted/60 p-1" : "contents"}>
+          {tags.map((tag) => {
+            const TagIcon = rewardTagIcons[tag];
+            const label = getTaskTagLabel(tag) ?? tag;
+            return (
+              <span
+                key={tag}
+                className={compactTags ? "grid h-5 w-5 place-items-center rounded-md text-primary" : "grid h-10 w-10 place-items-center rounded-2xl bg-muted text-primary"}
+                title={`${label} tag`}
+              >
+                <TagIcon className={compactTags ? "h-3.5 w-3.5" : "h-5 w-5"} />
+              </span>
+            );
+          })}
+        </div>
+      ) : null}
       {reward.recurring ? (
         <span className="grid h-10 w-10 place-items-center rounded-2xl bg-muted text-primary" title="Repeats after each claim">
           <RefreshCw className="h-5 w-5" />
@@ -283,12 +296,12 @@ function createRewardConfig(reward: Omit<AvatarCosmeticReward, "level">): Avatar
 
 function loadDailyState(): DailyState {
   if (typeof window === "undefined") {
-    return { tasks: [], completedTaskIds: [], completionDatesByTask: {}, totalXp: 0 };
+    return { tasks: [], completedTaskIds: [], completionDatesByTask: {}, completionTagsByTask: {}, totalXp: 0 };
   }
 
   const saved = window.localStorage.getItem(STORAGE_KEY);
   if (!saved) {
-    return { tasks: [], completedTaskIds: [], completionDatesByTask: {}, totalXp: 0 };
+    return { tasks: [], completedTaskIds: [], completionDatesByTask: {}, completionTagsByTask: {}, totalXp: 0 };
   }
 
   try {
@@ -315,10 +328,19 @@ function loadDailyState(): DailyState {
               ])
             )
           : {},
+      completionTagsByTask:
+        parsed.completionTagsByTask && typeof parsed.completionTagsByTask === "object"
+          ? Object.fromEntries(
+              Object.entries(parsed.completionTagsByTask).flatMap(([taskId, tag]) => {
+                const normalizedTag = normalizeTaskTag(typeof tag === "string" ? tag : undefined);
+                return normalizedTag ? [[taskId, normalizedTag]] : [];
+              })
+            )
+          : {},
       totalXp: Math.max(0, Number(parsed.totalXp) || 0)
     };
   } catch {
-    return { tasks: [], completedTaskIds: [], completionDatesByTask: {}, totalXp: 0 };
+    return { tasks: [], completedTaskIds: [], completionDatesByTask: {}, completionTagsByTask: {}, totalXp: 0 };
   }
 }
 
@@ -387,7 +409,7 @@ function RewardClaimBurst() {
 
 export default function RewardsPage() {
   const [activeTab, setActiveTab] = useState<RewardsTab>("rewards");
-  const [dailyState, setDailyState] = useState<DailyState>({ tasks: [], completedTaskIds: [], completionDatesByTask: {}, totalXp: 0 });
+  const [dailyState, setDailyState] = useState<DailyState>({ tasks: [], completedTaskIds: [], completionDatesByTask: {}, completionTagsByTask: {}, totalXp: 0 });
   const [claimedRewards, setClaimedRewards] = useState<Set<string>>(() => new Set());
   const [recurringRewards, setRecurringRewards] = useState<RecurringRewardState>({});
   const [claimBursts, setClaimBursts] = useState<string[]>([]);
@@ -637,14 +659,14 @@ export default function RewardsPage() {
                         {progressItems.map((progress) => {
                           const remaining = Math.max(0, progress.target - progress.current);
                           const percent = progress.target > 0 ? Math.min(100, (progress.current / progress.target) * 100) : 0;
-                          const progressStatus = progress.target === 0 ? "Add a task" : remaining > 0 ? `${remaining} left` : "Complete";
+                          const progressStatus = progress.target === 0 ? "Add a task" : remaining > 0 ? `${remaining.toLocaleString()} left` : "Complete";
 
                           return (
                             <div key={progress.label}>
                               <div className="mb-1.5 flex items-start justify-between gap-3 text-xs font-bold">
                                 <span className="text-muted-foreground">{progress.label}</span>
                                 <span className="shrink-0 text-secondary">
-                                  {progress.current}/{progress.target} {progress.unit} · {progressStatus}
+                                  {progress.current.toLocaleString()}/{progress.target.toLocaleString()} {progress.unit} · {progressStatus}
                                 </span>
                               </div>
                               <div className="h-2 overflow-hidden rounded-full bg-background">

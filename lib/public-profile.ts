@@ -19,6 +19,7 @@ type StoredTask = {
 type StoredDailyState = {
   tasks?: StoredTask[];
   completionDatesByTask?: Record<string, string[]>;
+  completionTagsByTask?: Record<string, string>;
   totalXp?: number;
 };
 
