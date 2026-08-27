@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Award, BookOpen, Brain, CheckCircle2, Dumbbell, Flame, Footprints, Globe2, Pencil, Search, Sun, type LucideIcon } from "lucide-react";
 import { getLevelSnapshot } from "@/lib/levels";
 import {
+  getClaimedRewardCount,
+  getCurrentHighestStreak,
   getStoredPublicDisplayName,
+  getTotalTasksCompleted,
   isPublicProfileEnabled,
   loadOtherPublicProfiles,
   setPublicProfileEnabled,
@@ -65,15 +68,9 @@ function normalizeProfileState(value: unknown): StoredDailyState {
   };
 }
 
-function getBestStreak(completionDatesByTask: Record<string, string[]> = {}) {
-  return Object.values(completionDatesByTask).reduce(
-    (best, dates) => Math.max(best, Array.isArray(dates) ? dates.length : 0),
-    0
-  );
-}
-
 export function ProfilePage() {
   const [dailyState, setDailyState] = useState<StoredDailyState>({});
+  const [rewardCount, setRewardCount] = useState(0);
   const [editingCharacter, setEditingCharacter] = useState(false);
   const [expandedProfileId, setExpandedProfileId] = useState<string | null>(null);
   const [allProfiles, setAllProfiles] = useState<PublicProfile[]>([]);
@@ -87,6 +84,7 @@ export function ProfilePage() {
     const saved = window.localStorage.getItem(STORAGE_KEY);
     setProfilePublic(isPublicProfileEnabled());
     setDisplayName(getStoredPublicDisplayName());
+    setRewardCount(getClaimedRewardCount());
 
     if (!saved) {
       return;
@@ -135,9 +133,8 @@ export function ProfilePage() {
 
   const totalXp = Number(dailyState.totalXp) || 0;
   const level = useMemo(() => getLevelSnapshot(totalXp), [totalXp]);
-  const totalTasks = dailyState.tasks?.length ?? 0;
-  const completedToday = dailyState.completedTaskIds?.length ?? 0;
-  const bestStreak = getBestStreak(dailyState.completionDatesByTask);
+  const totalTasksCompleted = getTotalTasksCompleted(dailyState);
+  const currentHighestStreak = getCurrentHighestStreak(dailyState);
   const searchedProfiles = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) {
@@ -207,18 +204,18 @@ export function ProfilePage() {
         </section>
       ) : null}
 
-      <section className="grid grid-cols-3 gap-3">
-        <div className="neon-card rounded-3xl p-4 text-center">
-          <CheckCircle2 className="mx-auto mb-2 h-5 w-5 text-accent" />
-          <div className="text-lg font-black">{completedToday}/{totalTasks}</div>
+      <section className="grid grid-cols-3 gap-2">
+        <div className="neon-card rounded-2xl px-2 py-2.5 text-center" aria-label={`${totalTasksCompleted} tasks completed in total`}>
+          <CheckCircle2 className="mx-auto mb-1 h-4 w-4 text-accent" />
+          <div className="text-base font-black">{totalTasksCompleted.toLocaleString()}</div>
         </div>
-        <div className="neon-card rounded-3xl p-4 text-center">
-          <Flame className="mx-auto mb-2 h-5 w-5 fill-orange-400 text-orange-400" />
-          <div className="text-lg font-black">{bestStreak}</div>
+        <div className="neon-card rounded-2xl px-2 py-2.5 text-center" aria-label={`${currentHighestStreak} current highest streak`}>
+          <Flame className="mx-auto mb-1 h-4 w-4 fill-orange-400 text-orange-400" />
+          <div className="text-base font-black">{currentHighestStreak.toLocaleString()}</div>
         </div>
-        <div className="neon-card rounded-3xl p-4 text-center">
-          <Award className="mx-auto mb-2 h-5 w-5 text-secondary" />
-          <div className="text-lg font-black">0</div>
+        <div className="neon-card rounded-2xl px-2 py-2.5 text-center" aria-label={`${rewardCount} rewards obtained`}>
+          <Award className="mx-auto mb-1 h-4 w-4 text-secondary" />
+          <div className="text-base font-black">{rewardCount.toLocaleString()}</div>
         </div>
       </section>
 
@@ -261,14 +258,18 @@ export function ProfilePage() {
                   <div className={expanded ? "mt-1 text-sm font-bold text-secondary" : "text-xs font-bold text-secondary"}>Level {profile.level}</div>
                   <div className={expanded ? "grid grid-rows-[1fr] transition-all duration-300 ease-out" : "grid grid-rows-[0fr] transition-all duration-300 ease-out"}>
                     <div className="overflow-hidden">
-                      <div className="mt-5 grid gap-3 min-[420px]:grid-cols-2">
-                        <div className="flex items-center justify-center gap-2 rounded-2xl bg-muted px-3 py-2 text-sm font-bold text-muted-foreground" aria-label={`${profile.achievements} achievements`}>
-                          <Award className="h-5 w-5 text-secondary" />
-                          <span className="text-base font-black text-foreground">{profile.achievements}</span>
+                      <div className="mt-5 grid grid-cols-3 gap-2">
+                        <div className="flex flex-col items-center justify-center gap-1 rounded-xl bg-muted px-1 py-2 text-muted-foreground" aria-label={`${profile.totalTasksCompleted} tasks completed in total`}>
+                          <CheckCircle2 className="h-4 w-4 text-accent" />
+                          <span className="text-sm font-black text-foreground">{profile.totalTasksCompleted.toLocaleString()}</span>
                         </div>
-                        <div className="flex items-center justify-center gap-2 rounded-2xl bg-muted px-3 py-2 text-sm font-bold text-muted-foreground" aria-label={`${profile.highestStreak} highest streak`}>
-                          <Flame className="h-5 w-5 fill-orange-400 text-orange-400" />
-                          <span className="text-base font-black text-foreground">{profile.highestStreak}</span>
+                        <div className="flex flex-col items-center justify-center gap-1 rounded-xl bg-muted px-1 py-2 text-muted-foreground" aria-label={`${profile.currentHighestStreak} current highest streak`}>
+                          <Flame className="h-4 w-4 fill-orange-400 text-orange-400" />
+                          <span className="text-sm font-black text-foreground">{profile.currentHighestStreak.toLocaleString()}</span>
+                        </div>
+                        <div className="flex flex-col items-center justify-center gap-1 rounded-xl bg-muted px-1 py-2 text-muted-foreground" aria-label={`${profile.rewards} rewards obtained`}>
+                          <Award className="h-4 w-4 text-secondary" />
+                          <span className="text-sm font-black text-foreground">{profile.rewards.toLocaleString()}</span>
                         </div>
                       </div>
 

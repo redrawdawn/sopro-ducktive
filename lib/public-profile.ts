@@ -32,9 +32,10 @@ export type PublicProfile = {
   id: string;
   name: string;
   level: number;
-  achievements: number;
+  rewards: number;
+  totalTasksCompleted: number;
   avatarConfig: AvatarConfig;
-  highestStreak: number;
+  currentHighestStreak: number;
   medals: PublicProfileMedal[];
 };
 
@@ -44,6 +45,7 @@ type PublicProfileRow = {
   avatar_config: unknown;
   level: number | null;
   achievements_count: number | null;
+  total_tasks_completed?: number | null;
   highest_streak?: number | null;
   medals: unknown;
 };
@@ -87,28 +89,31 @@ function parseDailyState(): StoredDailyState {
   }
 }
 
-function daysBetween(startDateKey: string, endDateKey: string) {
-  const start = new Date(`${startDateKey}T00:00:00`);
-  const end = new Date(`${endDateKey}T00:00:00`);
-  return Math.max(0, Math.round((end.getTime() - start.getTime()) / 86400000));
+function localDateKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function getLongestStreak(completionDates: string[] = []) {
-  const sortedDates = Array.from(new Set(completionDates)).sort();
-  let longest = 0;
-  let current = 0;
-  let previousDate: string | null = null;
+function addDays(dateKey: string, amount: number) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  date.setDate(date.getDate() + amount);
+  return localDateKey(date);
+}
 
-  for (const date of sortedDates) {
-    current = previousDate && daysBetween(previousDate, date) === 1 ? current + 1 : 1;
-    longest = Math.max(longest, current);
-    previousDate = date;
+function getCurrentStreak(completionDates: string[] = [], date = new Date()) {
+  const completedDates = new Set(completionDates);
+  const today = localDateKey(date);
+  let cursor = completedDates.has(today) ? today : addDays(today, -1);
+  let streak = 0;
+
+  while (completedDates.has(cursor)) {
+    streak += 1;
+    cursor = addDays(cursor, -1);
   }
 
-  return longest;
+  return streak;
 }
 
-function getClaimedAchievementCount() {
+export function getClaimedRewardCount() {
   if (typeof window === "undefined") {
     return 0;
   }
@@ -135,12 +140,23 @@ function buildMedals(state: StoredDailyState) {
   });
 }
 
-function getHighestStreak(state: StoredDailyState) {
+export function getTotalTasksCompleted(state: StoredDailyState) {
   const completionDatesByTask =
     state.completionDatesByTask && typeof state.completionDatesByTask === "object" ? state.completionDatesByTask : {};
 
   return Object.values(completionDatesByTask).reduce(
-    (best, dates) => Math.max(best, Array.isArray(dates) ? getLongestStreak(dates) : 0),
+    (total, dates) => total + new Set(Array.isArray(dates) ? dates : []).size,
+    0
+  );
+}
+
+export function getCurrentHighestStreak(state: StoredDailyState, date = new Date()) {
+  const tasks = Array.isArray(state.tasks) ? state.tasks : [];
+  const completionDatesByTask =
+    state.completionDatesByTask && typeof state.completionDatesByTask === "object" ? state.completionDatesByTask : {};
+
+  return tasks.reduce(
+    (best, task) => Math.max(best, task.id ? getCurrentStreak(completionDatesByTask[task.id] ?? [], date) : 0),
     0
   );
 }
@@ -169,15 +185,17 @@ export function buildPublicProfileSnapshot() {
   const state = parseDailyState();
   const level = getLevelSnapshot(Math.max(0, Number(state.totalXp) || 0)).level;
   const medals = buildMedals(state);
-  const highestStreak = getHighestStreak(state);
+  const currentHighestStreak = getCurrentHighestStreak(state);
+  const totalTasksCompleted = getTotalTasksCompleted(state);
 
   return {
     display_name: getStoredPublicDisplayName() || "Name soon",
     avatar_config: getStoredAvatarConfig(),
     level,
     total_xp: Math.max(0, Number(state.totalXp) || 0),
-    achievements_count: Math.max(getClaimedAchievementCount(), medals.length),
-    highest_streak: highestStreak,
+    achievements_count: getClaimedRewardCount(),
+    total_tasks_completed: totalTasksCompleted,
+    highest_streak: currentHighestStreak,
     medals
   };
 }
@@ -204,17 +222,27 @@ export async function syncCurrentPublicProfile(
   }
 
   const snapshot = buildPublicProfileSnapshot();
+  const profileRow = {
+    user_id: resolvedUserId,
+    is_public: true,
+    ...snapshot,
+    updated_at: new Date().toISOString()
+  };
   const { error } = await supabase.from("app_public_profiles").upsert(
-    {
-      user_id: resolvedUserId,
-      is_public: true,
-      ...snapshot,
-      updated_at: new Date().toISOString()
-    },
+    profileRow,
     { onConflict: "user_id" }
   );
 
   if (error) {
+    if (error.message.toLowerCase().includes("total_tasks_completed")) {
+      const legacyProfileRow = Object.fromEntries(
+        Object.entries(profileRow).filter(([key]) => key !== "total_tasks_completed")
+      );
+      const legacyResult = await supabase.from("app_public_profiles").upsert(legacyProfileRow, { onConflict: "user_id" });
+      if (!legacyResult.error) {
+        return;
+      }
+    }
     console.warn("Motive public profile sync failed", error.message);
   }
 }
@@ -228,52 +256,58 @@ export async function loadOtherPublicProfiles(limit = 20) {
 
   await syncCurrentPublicProfile(supabase, userId);
 
-  const { data, error } = await supabase
-    .from("app_public_profiles")
-    .select("user_id, display_name, avatar_config, level, achievements_count, highest_streak, medals")
-    .eq("is_public", true)
-    .neq("user_id", userId)
-    .order("updated_at", { ascending: false })
-    .limit(limit);
+  let includeTotalTasks = true;
+  let includeHighestStreak = true;
+  let profiles: PublicProfileRow[] | null = null;
 
-  if (error) {
-    const missingHighestStreak = error.message.toLowerCase().includes("highest_streak");
-    if (!missingHighestStreak) {
-      console.warn("Motive public profiles unavailable", error.message);
-      return [];
-    }
-
-    const fallback = await supabase
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const fields = [
+      "user_id",
+      "display_name",
+      "avatar_config",
+      "level",
+      "achievements_count",
+      ...(includeTotalTasks ? ["total_tasks_completed"] : []),
+      ...(includeHighestStreak ? ["highest_streak"] : []),
+      "medals"
+    ].join(", ");
+    const result = await supabase
       .from("app_public_profiles")
-      .select("user_id, display_name, avatar_config, level, achievements_count, medals")
+      .select(fields)
       .eq("is_public", true)
       .neq("user_id", userId)
       .order("updated_at", { ascending: false })
       .limit(limit);
 
-    if (fallback.error) {
-      console.warn("Motive public profiles unavailable", fallback.error.message);
-      return [];
+    if (!result.error) {
+      profiles = result.data as unknown as PublicProfileRow[];
+      break;
     }
 
-    return (fallback.data as PublicProfileRow[]).map((profile) => ({
-      id: profile.user_id,
-      name: profile.display_name?.trim() || "Name soon",
-      level: Math.max(1, Number(profile.level) || 1),
-      achievements: Math.max(0, Number(profile.achievements_count) || 0),
-      avatarConfig: normalizeAvatarConfig(profile.avatar_config),
-      highestStreak: 0,
-      medals: normalizeMedals(profile.medals)
-    }));
+    const message = result.error.message.toLowerCase();
+    let retry = false;
+    if (includeTotalTasks && message.includes("total_tasks_completed")) {
+      includeTotalTasks = false;
+      retry = true;
+    }
+    if (includeHighestStreak && message.includes("highest_streak")) {
+      includeHighestStreak = false;
+      retry = true;
+    }
+    if (!retry) {
+      console.warn("Motive public profiles unavailable", result.error.message);
+      return [];
+    }
   }
 
-  return (data as PublicProfileRow[]).map((profile) => ({
+  return (profiles ?? []).map((profile) => ({
     id: profile.user_id,
     name: profile.display_name?.trim() || "Name soon",
     level: Math.max(1, Number(profile.level) || 1),
-    achievements: Math.max(0, Number(profile.achievements_count) || 0),
+    rewards: Math.max(0, Number(profile.achievements_count) || 0),
+    totalTasksCompleted: includeTotalTasks ? Math.max(0, Number(profile.total_tasks_completed) || 0) : 0,
     avatarConfig: normalizeAvatarConfig(profile.avatar_config),
-    highestStreak: Math.max(0, Number(profile.highest_streak) || 0),
+    currentHighestStreak: includeHighestStreak ? Math.max(0, Number(profile.highest_streak) || 0) : 0,
     medals: normalizeMedals(profile.medals)
   }));
 }
