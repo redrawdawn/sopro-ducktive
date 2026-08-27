@@ -35,6 +35,7 @@ export type GeneralRewardDefinition = {
   description: string;
   criterion: GeneralRewardCriterion;
   recurring?: boolean;
+  cooldownDays?: number;
 };
 
 export type GeneralRewardProgressItem = {
@@ -45,7 +46,7 @@ export type GeneralRewardProgressItem = {
 };
 
 export const generalRewardDefinitions: GeneralRewardDefinition[] = [
-  { id: "weekly-streak-7", description: "Weekly streak - Have a 7 day streak on any task", criterion: { kind: "any-task-streak", days: 7 }, recurring: true },
+  { id: "weekly-streak-7", description: "Weekly streak - Have a 7 day streak on any task", criterion: { kind: "any-task-streak", days: 7 }, recurring: true, cooldownDays: 7 },
   { id: "tasks-recurring-30", description: "Complete 30 tasks", criterion: { kind: "recurring-task-completions", count: 30 }, recurring: true },
   { id: "tasks-total-50", description: "Complete 50 tasks in total", criterion: { kind: "total-task-completions", count: 50 } },
   { id: "tasks-total-100", description: "Complete 100 tasks in total", criterion: { kind: "total-task-completions", count: 100 } },
@@ -168,6 +169,10 @@ function localDateKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function isLocalDateKey(value?: string) {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
 function getBestTaskStreak(state: RewardDailyState, afterDate?: string) {
   const tasks = Array.isArray(state.tasks) ? state.tasks : [];
   return Math.max(0, ...tasks.map((task) => {
@@ -234,9 +239,17 @@ export function getGeneralRewardProgress(
   const criterion = reward.criterion;
 
   if (criterion.kind === "any-task-streak") {
+    const lastClaimDate = reward.recurring && isLocalDateKey(recurringRewards[rewardId])
+      ? recurringRewards[rewardId]
+      : undefined;
+    const bestTaskStreak = getBestTaskStreak(state, lastClaimDate);
+    const cooldownProgress = reward.cooldownDays && lastClaimDate
+      ? daysBetween(lastClaimDate, localDateKey())
+      : bestTaskStreak;
+
     return [{
       label: "Best task streak",
-      current: getBestTaskStreak(state, reward.recurring ? recurringRewards[rewardId] : undefined),
+      current: Math.min(bestTaskStreak, cooldownProgress),
       target: criterion.days,
       unit: "days"
     }];
@@ -327,6 +340,15 @@ export function isRewardClaimEligible(id: string, state: RewardDailyState, recur
   const generalReward = generalRewardDefinitions.find((reward) => `reward:${reward.id}` === id);
 
   if (generalReward) {
+    const lastClaimDate = recurringRewards[id];
+    if (
+      generalReward.cooldownDays
+      && isLocalDateKey(lastClaimDate)
+      && daysBetween(lastClaimDate, localDateKey()) < generalReward.cooldownDays
+    ) {
+      return false;
+    }
+
     const progress = getGeneralRewardProgress(generalReward.id, state, recurringRewards);
     return progress.length > 0 && progress.every((item) => item.target > 0 && item.current >= item.target);
   }
