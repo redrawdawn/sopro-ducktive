@@ -113,6 +113,7 @@ const avatarUnlockHints: Record<string, string> = {
   "detail-fairy.png": "have a 14 day streak of Garden tasks",
   "body-alien.png": "have a 14 day streak of Meditate tasks",
   "face-eyepatch.png": "have a 14 day streak of Read tasks",
+  "arms01.png": "complete 25 Run tasks in total and have a streak of 7 Workout tasks",
   ...Object.fromEntries(avatarLevelRewards.map((reward) => [reward.part, `unlocks at level ${reward.level}`]))
 };
 
@@ -127,6 +128,7 @@ const avatarPartRewardIds: Record<string, string> = {
   "detail-fairy.png": "reward:garden-streak-14",
   "body-alien.png": "reward:meditate-streak-14",
   "face-eyepatch.png": "reward:read-streak-14",
+  "arms01.png": "reward:run-25-workout-streak-7",
   "legs-insect.png": "medal:run:Bronze",
   "legs-four.png": "medal:run:Silver",
   "legs-spider.png": "medal:run:Gold",

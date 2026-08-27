@@ -112,6 +112,7 @@ type MedalSet = {
 
 const rewardCosmetics: Record<string, Omit<AvatarCosmeticReward, "level">> = {
   "all-tags-20": { category: "Hat", part: "hat-adventure.png" },
+  "run-25-workout-streak-7": { category: "Arms", part: "arms01.png" },
   "garden-streak-14": { category: "Detail", part: "detail-fairy.png" },
   "meditate-streak-14": { category: "Body", part: "body-alien.png" },
   "read-streak-14": { category: "Face", part: "face-eyepatch.png" },
@@ -683,8 +684,8 @@ export default function RewardsPage() {
                       <h2 className="break-words font-black">{reward.description}</h2>
                       {reward.recurring ? (
                         <p className="mt-1 text-xs font-bold text-muted-foreground">
-                          {reward.criterion.kind === "daily-task-completions"
-                            ? "Can be claimed once per day and resets after each claim."
+                          {reward.criterion.kind === "recurring-task-completions"
+                            ? "Can be claimed again after every 30 additional completed tasks."
                             : "Resets after each claim so it can be earned again."}
                         </p>
                       ) : null}
