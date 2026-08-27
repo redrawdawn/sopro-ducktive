@@ -27,7 +27,8 @@ type GeneralRewardCriterion =
   | { kind: "simultaneous-task-streak"; taskCount: number; days: number }
   | { kind: "total-task-completions"; count: number }
   | { kind: "daily-task-completions"; count: number }
-  | { kind: "tag-completions"; tags: TaskTag[]; count: number };
+  | { kind: "tag-completions"; tags: TaskTag[]; count: number }
+  | { kind: "tag-total-and-streak"; totalTag: TaskTag; totalCount: number; streakTag: TaskTag; streakDays: number };
 
 export type GeneralRewardDefinition = {
   id: string;
@@ -48,10 +49,15 @@ export const generalRewardDefinitions: GeneralRewardDefinition[] = [
   { id: "daily-tasks-5", description: "Complete 5 tasks in one day", criterion: { kind: "daily-task-completions", count: 5 }, recurring: true },
   { id: "tasks-total-50", description: "Complete 50 tasks in total", criterion: { kind: "total-task-completions", count: 50 } },
   { id: "tasks-total-100", description: "Complete 100 tasks in total", criterion: { kind: "total-task-completions", count: 100 } },
+  { id: "tasks-total-500", description: "Complete 500 tasks in total", criterion: { kind: "total-task-completions", count: 500 } },
   { id: "tasks-total-1000", description: "Complete 1,000 tasks in total", criterion: { kind: "total-task-completions", count: 1000 } },
   { id: "all-tags-20", description: "Complete 20 of each task: Workout, Run, Read, Wake up, Meditate, Garden, Work", criterion: { kind: "tag-completions", tags: ["workout", "run", "read", "wake-up", "meditate", "garden", "work"], count: 20 } },
+  { id: "run-25-workout-streak-7", description: "Complete 25 Run tasks in total and have a streak of 7 Workout tasks", criterion: { kind: "tag-total-and-streak", totalTag: "run", totalCount: 25, streakTag: "workout", streakDays: 7 } },
   { id: "streak-7", description: "Get a 7 day streak on any task", criterion: { kind: "any-task-streak", days: 7 } },
   { id: "streak-30", description: "Get a 30 day streak on any task", criterion: { kind: "any-task-streak", days: 30 } },
+  { id: "garden-streak-14", description: "Have a 14 day streak of Garden tasks", criterion: { kind: "tag-streak", tags: ["garden"], days: 14 } },
+  { id: "meditate-streak-14", description: "Have a 14 day streak of Meditate tasks", criterion: { kind: "tag-streak", tags: ["meditate"], days: 14 } },
+  { id: "read-streak-14", description: "Have a 14 day streak of Read tasks", criterion: { kind: "tag-streak", tags: ["read"], days: 14 } },
   { id: "wake-read-garden-5", description: "Have a 5 day streak of Wake up, Read, and Garden", criterion: { kind: "tag-streak", tags: ["wake-up", "read", "garden"], days: 5 } },
   { id: "wake-workout-run-14", description: "Have a 14 day streak of Wake up, Workout, and Run", criterion: { kind: "tag-streak", tags: ["wake-up", "workout", "run"], days: 14 } },
   { id: "sleep-30-total", description: "Get a 21 day Wake up streak", criterion: { kind: "tag-streak", tags: ["wake-up"], days: 21 } },
@@ -65,10 +71,14 @@ export const generalRewardXp: Record<string, number> = {
   "reward:daily-tasks-5": 10,
   "reward:tasks-total-50": 50,
   "reward:tasks-total-100": 100,
+  "reward:tasks-total-500": 500,
   "reward:tasks-total-1000": 1000,
   "reward:all-tags-20": 150,
   "reward:streak-7": 50,
   "reward:streak-30": 500,
+  "reward:garden-streak-14": 30,
+  "reward:meditate-streak-14": 30,
+  "reward:read-streak-14": 30,
   "reward:wake-read-garden-5": 30,
   "reward:wake-workout-run-14": 50
 };
@@ -243,6 +253,25 @@ export function getGeneralRewardProgress(
       target: criterion.count,
       unit: "tasks"
     }));
+  }
+
+  if (criterion.kind === "tag-total-and-streak") {
+    const tagTotals = getRewardTagTotals(state);
+    const tagStreaks = getRewardTagStreaks(state);
+    return [
+      {
+        label: `${getTaskTagLabel(criterion.totalTag) ?? criterion.totalTag} tasks completed in total`,
+        current: tagTotals[criterion.totalTag] ?? 0,
+        target: criterion.totalCount,
+        unit: "tasks"
+      },
+      {
+        label: `${getTaskTagLabel(criterion.streakTag) ?? criterion.streakTag} streak`,
+        current: tagStreaks[criterion.streakTag] ?? 0,
+        target: criterion.streakDays,
+        unit: "days"
+      }
+    ];
   }
 
   if (criterion.kind === "total-task-completions") {

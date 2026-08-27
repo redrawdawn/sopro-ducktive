@@ -112,6 +112,9 @@ type MedalSet = {
 
 const rewardCosmetics: Record<string, Omit<AvatarCosmeticReward, "level">> = {
   "all-tags-20": { category: "Hat", part: "hat-adventure.png" },
+  "garden-streak-14": { category: "Detail", part: "detail-fairy.png" },
+  "meditate-streak-14": { category: "Body", part: "body-alien.png" },
+  "read-streak-14": { category: "Face", part: "face-eyepatch.png" },
   "wake-read-garden-5": { category: "Face", part: "face-sad.png" },
   "wake-workout-run-14": { category: "Face", part: "face-cool.png" },
   "sleep-30-total": { category: "Hair", part: "hair-wild.png" },
@@ -222,6 +225,33 @@ const rewardTagIcons: Record<TaskTag, LucideIcon> = {
 
 function RewardRequirementIcons({ reward }: { reward: GeneralRewardDefinition }) {
   const criterion = reward.criterion;
+
+  if (criterion.kind === "tag-total-and-streak") {
+    const StreakTagIcon = rewardTagIcons[criterion.streakTag];
+    const TotalTagIcon = rewardTagIcons[criterion.totalTag];
+    const streakLabel = getTaskTagLabel(criterion.streakTag) ?? criterion.streakTag;
+    const totalLabel = getTaskTagLabel(criterion.totalTag) ?? criterion.totalTag;
+
+    return (
+      <div className="flex shrink-0 items-center gap-1.5" aria-label={`Requirement icons for ${reward.description}`}>
+        <span className="flex h-10 min-w-10 items-center justify-center gap-1 rounded-2xl bg-orange-500/15 px-2 text-orange-400" title={`${criterion.streakDays} day streak`}>
+          <Flame className="h-5 w-5 fill-orange-400" />
+          <span className="text-sm font-black">{criterion.streakDays}</span>
+        </span>
+        <span className="grid h-10 w-10 place-items-center rounded-2xl bg-muted text-primary" title={`${streakLabel} tag`}>
+          <StreakTagIcon className="h-5 w-5" />
+        </span>
+        <span className="flex h-10 min-w-10 items-center justify-center gap-1 rounded-2xl bg-primary/10 px-2 text-primary" title={`${criterion.totalCount} task completions`}>
+          <CheckCircle2 className="h-5 w-5" />
+          <span className="text-sm font-black">{criterion.totalCount}</span>
+        </span>
+        <span className="grid h-10 w-10 place-items-center rounded-2xl bg-muted text-primary" title={`${totalLabel} tag`}>
+          <TotalTagIcon className="h-5 w-5" />
+        </span>
+      </div>
+    );
+  }
+
   const tags = criterion.kind === "tag-streak" || criterion.kind === "tag-completions" ? criterion.tags : [];
   const streakDays = "days" in criterion ? criterion.days : null;
   const completionCount = "count" in criterion ? criterion.count : null;
@@ -631,14 +661,17 @@ export default function RewardsPage() {
                     <ChevronDown className={expanded ? "h-5 w-5 shrink-0 rotate-180 text-muted-foreground transition-transform" : "h-5 w-5 shrink-0 text-muted-foreground transition-transform"} />
                   </button>
                   {preview ? (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedReward(preview)}
-                      className="shrink-0 rounded-2xl outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-primary"
-                      aria-label={`Preview reward for ${reward.description}`}
-                    >
-                      <CharacterRewardPreview config={preview.config} />
-                    </button>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {reward.reward ? <div className="text-[10px] font-black text-secondary">{reward.reward}</div> : null}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedReward(preview)}
+                        className="shrink-0 rounded-2xl outline-none transition-transform hover:scale-105 focus-visible:ring-2 focus-visible:ring-primary"
+                        aria-label={`Preview reward for ${reward.description}`}
+                      >
+                        <CharacterRewardPreview config={preview.config} />
+                      </button>
+                    </div>
                   ) : (
                     <div className="shrink-0 text-xs font-black text-secondary">{reward.reward}</div>
                   )}
