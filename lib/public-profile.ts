@@ -7,6 +7,7 @@ import { getRewardTagTotals, isRecurringReward, isRetiredRewardId } from "@/lib/
 
 const DAILY_STORAGE_KEY = "sopro-ducktive-daily-v1";
 const CLAIMED_REWARDS_KEY = "sopro-ducktive-claimed-rewards-v1";
+const BACKUP_USER_KEY = "motive-backup-user-id";
 export const PUBLIC_PROFILE_KEY = "motive-public-profile-enabled";
 export const PUBLIC_PROFILE_NAME_KEY = "motive-public-profile-name";
 
@@ -252,6 +253,12 @@ export async function loadOtherPublicProfiles(limit = 20) {
   const userId = (await supabase.auth.getUser()).data.user?.id;
   if (!userId) {
     return [];
+  }
+
+  // Account restoration runs alongside the page on first load. Only publish the
+  // browser snapshot once it has been confirmed to belong to this signed-in user.
+  if (window.localStorage.getItem(BACKUP_USER_KEY) === userId) {
+    await syncCurrentPublicProfile(supabase, userId);
   }
 
   let includeTotalTasks = true;
