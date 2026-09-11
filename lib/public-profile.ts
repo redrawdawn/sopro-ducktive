@@ -51,6 +51,12 @@ type PublicProfileRow = {
   medals: unknown;
 };
 
+type PublicAvatarPayload = Partial<AvatarConfig> & {
+  motive_profile_stats?: {
+    total_tasks_completed?: unknown;
+  };
+};
+
 export function isPublicProfileEnabled() {
   if (typeof window === "undefined") {
     return false;
@@ -182,6 +188,11 @@ function normalizeMedals(value: unknown): PublicProfileMedal[] {
     .filter((medal): medal is PublicProfileMedal => medal !== null);
 }
 
+function getEmbeddedTotalTasksCompleted(value: unknown) {
+  const total = Number((value as PublicAvatarPayload | null)?.motive_profile_stats?.total_tasks_completed);
+  return Number.isFinite(total) && total >= 0 ? Math.floor(total) : null;
+}
+
 export function buildPublicProfileSnapshot() {
   const state = parseDailyState();
   const level = getLevelSnapshot(Math.max(0, Number(state.totalXp) || 0)).level;
@@ -191,7 +202,10 @@ export function buildPublicProfileSnapshot() {
 
   return {
     display_name: getStoredPublicDisplayName() || "Name soon",
-    avatar_config: getStoredAvatarConfig(),
+    avatar_config: {
+      ...getStoredAvatarConfig(),
+      motive_profile_stats: { total_tasks_completed: totalTasksCompleted }
+    },
     level,
     total_xp: Math.max(0, Number(state.totalXp) || 0),
     achievements_count: getClaimedRewardCount(),
@@ -305,14 +319,18 @@ export async function loadOtherPublicProfiles(limit = 20) {
     }
   }
 
-  return (profiles ?? []).map((profile) => ({
-    id: profile.user_id,
-    name: profile.display_name?.trim() || "Name soon",
-    level: Math.max(1, Number(profile.level) || 1),
-    rewards: Math.max(0, Number(profile.achievements_count) || 0),
-    totalTasksCompleted: includeTotalTasks ? Math.max(0, Number(profile.total_tasks_completed) || 0) : 0,
-    avatarConfig: normalizeAvatarConfig(profile.avatar_config),
-    currentHighestStreak: includeHighestStreak ? Math.max(0, Number(profile.highest_streak) || 0) : 0,
-    medals: normalizeMedals(profile.medals)
-  }));
+  return (profiles ?? []).map((profile) => {
+    const embeddedTotal = getEmbeddedTotalTasksCompleted(profile.avatar_config);
+
+    return {
+      id: profile.user_id,
+      name: profile.display_name?.trim() || "Name soon",
+      level: Math.max(1, Number(profile.level) || 1),
+      rewards: Math.max(0, Number(profile.achievements_count) || 0),
+      totalTasksCompleted: embeddedTotal ?? (includeTotalTasks ? Math.max(0, Number(profile.total_tasks_completed) || 0) : 0),
+      avatarConfig: normalizeAvatarConfig(profile.avatar_config),
+      currentHighestStreak: includeHighestStreak ? Math.max(0, Number(profile.highest_streak) || 0) : 0,
+      medals: normalizeMedals(profile.medals)
+    };
+  });
 }
