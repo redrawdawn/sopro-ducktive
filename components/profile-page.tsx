@@ -81,20 +81,32 @@ export function ProfilePage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    setProfilePublic(isPublicProfileEnabled());
-    setDisplayName(getStoredPublicDisplayName());
-    setRewardCount(getClaimedRewardCount());
+    function syncLocalProfileState() {
+      const saved = window.localStorage.getItem(STORAGE_KEY);
+      setProfilePublic(isPublicProfileEnabled());
+      setDisplayName(getStoredPublicDisplayName());
+      setRewardCount(getClaimedRewardCount());
 
-    if (!saved) {
-      return;
+      if (!saved) {
+        setDailyState({});
+        return;
+      }
+
+      try {
+        setDailyState(normalizeProfileState(JSON.parse(saved)));
+      } catch {
+        setDailyState({});
+      }
     }
 
-    try {
-      setDailyState(normalizeProfileState(JSON.parse(saved)));
-    } catch {
-      setDailyState({});
-    }
+    syncLocalProfileState();
+    window.addEventListener("motive-account-state-change", syncLocalProfileState);
+    window.addEventListener("storage", syncLocalProfileState);
+
+    return () => {
+      window.removeEventListener("motive-account-state-change", syncLocalProfileState);
+      window.removeEventListener("storage", syncLocalProfileState);
+    };
   }, []);
 
   useEffect(() => {

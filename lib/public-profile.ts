@@ -254,8 +254,6 @@ export async function loadOtherPublicProfiles(limit = 20) {
     return [];
   }
 
-  await syncCurrentPublicProfile(supabase, userId);
-
   let includeTotalTasks = true;
   let includeHighestStreak = true;
   let profiles: PublicProfileRow[] | null = null;
