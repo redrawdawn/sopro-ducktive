@@ -124,9 +124,13 @@ export function ProfilePage() {
     }
 
     void loadProfiles();
+    const refreshTimeout = window.setTimeout(() => void loadProfiles(), 1500);
+    window.addEventListener("focus", loadProfiles);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(refreshTimeout);
+      window.removeEventListener("focus", loadProfiles);
     };
   }, []);
 
