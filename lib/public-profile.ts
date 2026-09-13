@@ -209,7 +209,6 @@ export function buildPublicProfileSnapshot() {
     level,
     total_xp: Math.max(0, Number(state.totalXp) || 0),
     achievements_count: getClaimedRewardCount(),
-    total_tasks_completed: totalTasksCompleted,
     highest_streak: currentHighestStreak,
     medals
   };
@@ -249,15 +248,6 @@ export async function syncCurrentPublicProfile(
   );
 
   if (error) {
-    if (error.message.toLowerCase().includes("total_tasks_completed")) {
-      const legacyProfileRow = Object.fromEntries(
-        Object.entries(profileRow).filter(([key]) => key !== "total_tasks_completed")
-      );
-      const legacyResult = await supabase.from("app_public_profiles").upsert(legacyProfileRow, { onConflict: "user_id" });
-      if (!legacyResult.error) {
-        return;
-      }
-    }
     console.warn("Motive public profile sync failed", error.message);
   }
 }

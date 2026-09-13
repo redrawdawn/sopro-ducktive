@@ -20,6 +20,7 @@ import { AvatarCharacter } from "@/components/avatar-character";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { XpProgressBar } from "@/components/xp-progress-bar";
+import { ensureInitialMotiveStateRestore } from "@/lib/motive-backup";
 
 type StoredDailyState = {
   tasks?: Array<{ id: string }>;
@@ -113,6 +114,7 @@ export function ProfilePage() {
     let cancelled = false;
 
     async function loadProfiles() {
+      await ensureInitialMotiveStateRestore();
       const profiles = await loadOtherPublicProfiles();
       if (!cancelled) {
         setAllProfiles(profiles);

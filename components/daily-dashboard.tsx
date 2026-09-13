@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { getLevelSnapshot } from "@/lib/levels";
 import { AVATAR_ADMIN_UNLOCK_KEY } from "@/lib/avatar";
-import { backupMotiveState, clearMotiveLocalState, restoreMotiveStateFromBackup, scheduleMotiveBackup } from "@/lib/motive-backup";
+import { backupMotiveState, clearMotiveLocalState, ensureInitialMotiveStateRestore, scheduleMotiveBackup } from "@/lib/motive-backup";
 import {
   loadClaimedRewardsFromStorage,
   reconcileClaimedRewards,
@@ -490,7 +490,7 @@ export function DailyDashboard() {
   useEffect(() => {
     async function loadLocalAndCloudState() {
       try {
-        await restoreMotiveStateFromBackup({ preferCloud: true });
+        await ensureInitialMotiveStateRestore();
         const supabase = createClient();
         const { data } = await supabase.auth.getUser();
         setAccountEmail(data.user?.email ?? "");

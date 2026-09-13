@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { LoaderCircle } from "lucide-react";
-import { restoreMotiveStateFromBackup } from "@/lib/motive-backup";
+import { ensureInitialMotiveStateRestore, restoreMotiveStateFromBackup } from "@/lib/motive-backup";
 
 export function AccountStateSync() {
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -18,7 +18,11 @@ export function AccountStateSync() {
       refreshing = true;
 
       try {
-        await restoreMotiveStateFromBackup({ preferCloud });
+        if (preferCloud) {
+          await ensureInitialMotiveStateRestore();
+        } else {
+          await restoreMotiveStateFromBackup();
+        }
       } finally {
         refreshing = false;
       }

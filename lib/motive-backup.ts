@@ -22,6 +22,7 @@ const BACKUP_KEYS = [
 let backupTimeout: number | null = null;
 let backupInFlight = false;
 let backupQueued = false;
+let initialRestorePromise: Promise<boolean> | null = null;
 
 function notifyAccountStateChanged() {
   window.dispatchEvent(new Event("motive-account-state-change"));
@@ -112,6 +113,18 @@ export function scheduleMotiveBackup(delay = 250) {
 type RestoreOptions = {
   preferCloud?: boolean;
 };
+
+export function ensureInitialMotiveStateRestore() {
+  if (typeof window === "undefined") {
+    return Promise.resolve(false);
+  }
+
+  if (!initialRestorePromise) {
+    initialRestorePromise = restoreMotiveStateFromBackup({ preferCloud: true });
+  }
+
+  return initialRestorePromise;
+}
 
 export async function restoreMotiveStateFromBackup(options: RestoreOptions = {}) {
   if (typeof window === "undefined") {
