@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
@@ -20,7 +19,7 @@ import {
   X
 } from "lucide-react";
 import { getLevelSnapshot } from "@/lib/levels";
-import { AVATAR_ADMIN_UNLOCK_KEY } from "@/lib/avatar";
+import { AVATAR_ADMIN_UNLOCK_KEY, type AvatarConfig } from "@/lib/avatar";
 import { backupMotiveState, clearMotiveLocalState, ensureInitialMotiveStateRestore, scheduleMotiveBackup } from "@/lib/motive-backup";
 import {
   loadClaimedRewardsFromStorage,
@@ -101,6 +100,54 @@ const honestyPrompts = [
   "One tiny promise before we begin: only check off a task when you’ve honestly given it a real try. Deal?",
   "Motive can track your progress—but not your soul. Promise you’ll only check off tasks you actually put effort into?"
 ];
+
+const honestyDemonAvatar: AvatarConfig = {
+  parts: {
+    Body: "body-horns.png",
+    Legs: "legs-default.png",
+    Arms: "arms-default.png",
+    Face: "face-sleep.png",
+    Beard: "transparent.png",
+    Hair: "transparent.png",
+    Hat: "transparent.png",
+    Detail: "detail-tailarrow.png"
+  },
+  colors: {
+    Background: "#23102f",
+    Body: "#dc3f4f",
+    Legs: "#dc3f4f",
+    Arms: "#dc3f4f",
+    Face: "#dc3f4f",
+    Beard: "#ffffff",
+    Hair: "#ffffff",
+    Hat: "#ffffff",
+    Detail: "#dc3f4f"
+  }
+};
+
+const honestyAngelAvatar: AvatarConfig = {
+  parts: {
+    Body: "body-default.png",
+    Legs: "legs-default.png",
+    Arms: "arms-default.png",
+    Face: "face-eyes.png",
+    Beard: "transparent.png",
+    Hair: "transparent.png",
+    Hat: "transparent.png",
+    Detail: "detail-wings.png"
+  },
+  colors: {
+    Background: "#17172b",
+    Body: "#ffffff",
+    Legs: "#ffffff",
+    Arms: "#ffffff",
+    Face: "#ffffff",
+    Beard: "#ffffff",
+    Hair: "#ffffff",
+    Hat: "#ffffff",
+    Detail: "#ffffff"
+  }
+};
 
 const taskTabs: Array<{ id: TaskTab; label: string }> = [
   { id: "daily", label: "Daily" },
@@ -1563,12 +1610,10 @@ export function DailyDashboard() {
                 className="group flex min-h-48 flex-col items-center justify-end overflow-hidden rounded-3xl border border-red-400/25 bg-gradient-to-b from-red-950/25 to-red-500/10 px-2 pb-4 outline-none transition-transform hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-red-400 active:translate-y-0"
                 aria-label="Yeah, totally"
               >
-                <Image
-                  src="/honesty/pixel-demon.png"
-                  alt="Mischievous pixel demon"
-                  width={384}
-                  height={384}
-                  className="h-32 w-32 object-contain [image-rendering:pixelated] transition-transform group-hover:scale-105"
+                <AvatarCharacter
+                  config={honestyDemonAvatar}
+                  size="xl"
+                  className="border-red-400/20 transition-transform group-hover:scale-105"
                 />
                 <span className="mt-1 text-sm font-black text-red-300">Yeah, totally</span>
               </button>
@@ -1579,12 +1624,10 @@ export function DailyDashboard() {
                 className="group flex min-h-48 flex-col items-center justify-end overflow-hidden rounded-3xl border border-yellow-300/25 bg-gradient-to-b from-yellow-100/5 to-yellow-300/10 px-2 pb-4 outline-none transition-transform hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-yellow-300 active:translate-y-0"
                 aria-label="Yes"
               >
-                <Image
-                  src="/honesty/pixel-angel.png"
-                  alt="Kind pixel angel"
-                  width={384}
-                  height={384}
-                  className="h-32 w-32 object-contain [image-rendering:pixelated] transition-transform group-hover:scale-105"
+                <AvatarCharacter
+                  config={honestyAngelAvatar}
+                  size="xl"
+                  className="border-yellow-200/20 transition-transform group-hover:scale-105"
                 />
                 <span className="mt-1 text-sm font-black text-yellow-200">Yes</span>
               </button>
