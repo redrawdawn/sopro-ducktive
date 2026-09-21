@@ -102,10 +102,12 @@ export function ProfilePage() {
 
     syncLocalProfileState();
     window.addEventListener("motive-account-state-change", syncLocalProfileState);
+    window.addEventListener("motive-rewards-claimed-change", syncLocalProfileState);
     window.addEventListener("storage", syncLocalProfileState);
 
     return () => {
       window.removeEventListener("motive-account-state-change", syncLocalProfileState);
+      window.removeEventListener("motive-rewards-claimed-change", syncLocalProfileState);
       window.removeEventListener("storage", syncLocalProfileState);
     };
   }, []);

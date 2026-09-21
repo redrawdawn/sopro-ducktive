@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
   BookOpen,
@@ -81,12 +82,25 @@ type CycleTaskState = {
 const STORAGE_KEY = "sopro-ducktive-daily-v1";
 const CYCLE_STORAGE_KEY = "sopro-ducktive-cycle-tasks-v1";
 const THEME_STORAGE_KEY = "sopro-ducktive-theme";
+const HONESTY_PROMISE_KEY = "motive-honesty-promise-v1";
+const DAILY_TASK_XP = 15;
 const DAILY_TASK_LIMIT = 5;
 const CYCLE_TASK_LIMIT = 3;
 const SUBTASK_LIMIT = 5;
 type ThemeMode = "dark" | "light";
 type TaskTab = "daily" | "weekly" | "monthly" | "yearly";
 type CycleTab = Exclude<TaskTab, "daily">;
+type HonestyAction =
+  | { kind: "daily"; taskId: string }
+  | { kind: "cycle"; tab: CycleTab; taskId: string }
+  | { kind: "subtask"; taskId: string; subtaskId: string };
+
+const honestyPrompts = [
+  "Motive runs on honesty. Do you promise to only check off a task when you’ve made a real effort to complete it?",
+  "The honor system is sacred here. Will you only check off tasks you genuinely worked toward?",
+  "One tiny promise before we begin: only check off a task when you’ve honestly given it a real try. Deal?",
+  "Motive can track your progress—but not your soul. Promise you’ll only check off tasks you actually put effort into?"
+];
 
 const taskTabs: Array<{ id: TaskTab; label: string }> = [
   { id: "daily", label: "Daily" },
@@ -450,6 +464,7 @@ export function DailyDashboard() {
   const [checkCooldownIds, setCheckCooldownIds] = useState<string[]>([]);
   const [tagMessage, setTagMessage] = useState<{ taskId: string; label: string } | null>(null);
   const [streakMessageTaskId, setStreakMessageTaskId] = useState<string | null>(null);
+  const [honestyPrompt, setHonestyPrompt] = useState<{ action: HonestyAction; message: string } | null>(null);
   const [storageReady, setStorageReady] = useState(false);
   const previousXpRef = useRef<number | null>(null);
   const checkCooldownRef = useRef<Set<string>>(new Set());
@@ -867,7 +882,7 @@ export function DailyDashboard() {
           ...current.completionDatesByTask,
           [taskId]: nextDates
         },
-        totalXp: Math.max(0, current.totalXp + (completed ? -10 : 10))
+        totalXp: Math.max(0, current.totalXp + (completed ? -DAILY_TASK_XP : DAILY_TASK_XP))
       };
     });
   }
@@ -893,7 +908,7 @@ export function DailyDashboard() {
         ...current.completionDatesByTask,
         [taskId]: nextDates
       },
-      totalXp: Math.max(0, current.totalXp + (completed ? 10 : -10))
+      totalXp: Math.max(0, current.totalXp + (completed ? DAILY_TASK_XP : -DAILY_TASK_XP))
     };
   }
 
@@ -924,6 +939,53 @@ export function DailyDashboard() {
 
       return setTaskCompleted(nextState, taskId, allSubtasksCompleted);
     });
+  }
+
+  function performHonestyAction(action: HonestyAction) {
+    if (action.kind === "daily") {
+      if (!dailyState.completedTaskIds.includes(action.taskId)) {
+        triggerCompletionBurst(action.taskId);
+      }
+      toggleTask(action.taskId);
+      return;
+    }
+
+    if (action.kind === "cycle") {
+      toggleCycleTask(action.tab, action.taskId);
+      return;
+    }
+
+    const task = dailyState.tasks.find((item) => item.id === action.taskId);
+    const subtaskIds = task?.subtasks?.map((subtask) => subtask.id) ?? [];
+    const completedSubtaskIds = dailyState.completedSubtaskIdsByTask[action.taskId] ?? [];
+    const willCompleteTask = subtaskIds.length > 0
+      && subtaskIds.every((id) => id === action.subtaskId || completedSubtaskIds.includes(id));
+    if (willCompleteTask && !dailyState.completedTaskIds.includes(action.taskId)) {
+      triggerCompletionBurst(action.taskId);
+    }
+    toggleSubtask(action.taskId, action.subtaskId);
+  }
+
+  function requestHonestyAction(action: HonestyAction, completesTask: boolean) {
+    if (!completesTask || window.localStorage.getItem(HONESTY_PROMISE_KEY) === "true") {
+      performHonestyAction(action);
+      return;
+    }
+
+    const message = honestyPrompts[Math.floor(Math.random() * honestyPrompts.length)];
+    setHonestyPrompt({ action, message });
+  }
+
+  function acceptHonestyPromise() {
+    if (!honestyPrompt) {
+      return;
+    }
+
+    const action = honestyPrompt.action;
+    window.localStorage.setItem(HONESTY_PROMISE_KEY, "true");
+    setHonestyPrompt(null);
+    performHonestyAction(action);
+    scheduleMotiveBackup(250);
   }
 
   function addSubtask(event: React.FormEvent<HTMLFormElement>, taskId: string) {
@@ -1041,7 +1103,7 @@ export function DailyDashboard() {
         completionTagsByTask: taskTag
           ? { ...current.completionTagsByTask, [taskId]: taskTag }
           : current.completionTagsByTask,
-        totalXp: Math.max(0, current.totalXp - (wasCompleted ? 10 : 0))
+        totalXp: Math.max(0, current.totalXp - (wasCompleted ? DAILY_TASK_XP : 0))
       };
     });
 
@@ -1131,7 +1193,10 @@ export function DailyDashboard() {
                         <button
                           type="button"
                           disabled={checkboxCoolingDown}
-                          onClick={() => toggleCycleTask(activeTab, task.id)}
+                          onClick={() => requestHonestyAction(
+                            { kind: "cycle", tab: activeTab, taskId: task.id },
+                            !completed
+                          )}
                           className={completed ? "mt-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 text-white outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:opacity-70" : "mt-1 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-muted text-muted-foreground outline-none transition-opacity hover:bg-muted/80 focus-visible:ring-2 focus-visible:ring-muted-foreground/40 disabled:opacity-70"}
                           aria-label={completed ? `Uncheck ${activeTab} task` : `Check ${activeTab} task`}
                         >
@@ -1193,12 +1258,10 @@ export function DailyDashboard() {
                       <button
                         type="button"
                         disabled={checkboxCoolingDown}
-                        onClick={() => {
-                          if (!checkCooldownRef.current.has(`daily:${task.id}`) && !completed) {
-                            triggerCompletionBurst(task.id);
-                          }
-                          toggleTask(task.id);
-                        }}
+                        onClick={() => requestHonestyAction(
+                          { kind: "daily", taskId: task.id },
+                          !completed
+                        )}
                         className={completed ? "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 text-white shadow-none outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:opacity-70" : "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-muted text-muted-foreground outline-none transition-opacity hover:bg-muted/80 focus-visible:ring-2 focus-visible:ring-muted-foreground/40 disabled:opacity-70"}
                         aria-label={completed ? "Uncheck task" : "Check task"}
                       >
@@ -1243,7 +1306,7 @@ export function DailyDashboard() {
                     >
                       {task.title}
                     </button>
-                    <div className="shrink-0 text-xs font-bold text-secondary">+10 XP</div>
+                    <div className="shrink-0 text-xs font-bold text-secondary">+{DAILY_TASK_XP} XP</div>
                   </div>
 
                   <div className={expanded ? "grid grid-rows-[1fr] transition-all duration-300 ease-out" : "grid grid-rows-[0fr] transition-all duration-300 ease-out"}>
@@ -1312,12 +1375,10 @@ export function DailyDashboard() {
                                     <button
                                       type="button"
                                       disabled={subtaskCoolingDown}
-                                      onClick={() => {
-                                        if (!checkCooldownRef.current.has(`subtask:${task.id}:${subtask.id}`) && subtaskWillCompleteTask) {
-                                          triggerCompletionBurst(task.id);
-                                        }
-                                        toggleSubtask(task.id, subtask.id);
-                                      }}
+                                      onClick={() => requestHonestyAction(
+                                        { kind: "subtask", taskId: task.id, subtaskId: subtask.id },
+                                        subtaskWillCompleteTask
+                                      )}
                                       className={subtaskCompleted ? "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-teal-600 text-white outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:opacity-70" : "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-muted text-muted-foreground outline-none transition-opacity focus-visible:ring-2 focus-visible:ring-muted-foreground/40 disabled:opacity-70"}
                                       aria-label={subtaskCompleted ? "Uncheck subtask" : "Check subtask"}
                                     >
@@ -1475,6 +1536,60 @@ export function DailyDashboard() {
               </Button>
             </div>
           </form>
+        </div>
+      ) : null}
+
+      {honestyPrompt ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-5 backdrop-blur-sm animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="honesty-promise-title"
+          aria-describedby="honesty-promise-description"
+        >
+          <div className="neon-card w-full max-w-md overflow-hidden rounded-[2rem] border-primary/35 p-5 shadow-2xl shadow-primary/20 animate-in zoom-in-95 duration-200">
+            <div className="text-center">
+              <div className="text-xs font-black uppercase tracking-[0.2em] text-secondary">The Motive honor code</div>
+              <h2 id="honesty-promise-title" className="mt-2 text-2xl font-black">A tiny promise first</h2>
+              <p id="honesty-promise-description" className="mx-auto mt-3 max-w-sm text-sm font-semibold leading-6 text-muted-foreground">
+                {honestyPrompt.message}
+              </p>
+            </div>
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={acceptHonestyPromise}
+                className="group flex min-h-48 flex-col items-center justify-end overflow-hidden rounded-3xl border border-red-400/25 bg-gradient-to-b from-red-950/25 to-red-500/10 px-2 pb-4 outline-none transition-transform hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-red-400 active:translate-y-0"
+                aria-label="Yeah, totally"
+              >
+                <Image
+                  src="/honesty/pixel-demon.png"
+                  alt="Mischievous pixel demon"
+                  width={384}
+                  height={384}
+                  className="h-32 w-32 object-contain [image-rendering:pixelated] transition-transform group-hover:scale-105"
+                />
+                <span className="mt-1 text-sm font-black text-red-300">Yeah, totally</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={acceptHonestyPromise}
+                className="group flex min-h-48 flex-col items-center justify-end overflow-hidden rounded-3xl border border-yellow-300/25 bg-gradient-to-b from-yellow-100/5 to-yellow-300/10 px-2 pb-4 outline-none transition-transform hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-yellow-300 active:translate-y-0"
+                aria-label="Yes"
+              >
+                <Image
+                  src="/honesty/pixel-angel.png"
+                  alt="Kind pixel angel"
+                  width={384}
+                  height={384}
+                  className="h-32 w-32 object-contain [image-rendering:pixelated] transition-transform group-hover:scale-105"
+                />
+                <span className="mt-1 text-sm font-black text-yellow-200">Yes</span>
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 

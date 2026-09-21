@@ -133,14 +133,18 @@ export function getRewardTagStreaks(state: RewardDailyState) {
   const tasks = Array.isArray(state.tasks) ? state.tasks : [];
   const completionDatesByTask =
     state.completionDatesByTask && typeof state.completionDatesByTask === "object" ? state.completionDatesByTask : {};
+  const tasksById = new Map(tasks.filter((task) => task.id).map((task) => [task.id as string, task]));
 
-  return tasks.reduce<Record<string, number>>((streaks, task) => {
-    const tag = getStoredTaskTag(task);
-    if (!task.id || !tag) {
+  return Object.entries(completionDatesByTask).reduce<Record<string, number>>((streaks, [taskId, dates]) => {
+    const currentTask = tasksById.get(taskId);
+    const tag = currentTask
+      ? getStoredTaskTag(currentTask)
+      : normalizeTaskTag(state.completionTagsByTask?.[taskId]);
+    if (!tag) {
       return streaks;
     }
 
-    streaks[tag] = Math.max(streaks[tag] ?? 0, getLongestRewardStreak(completionDatesByTask[task.id] ?? []));
+    streaks[tag] = Math.max(streaks[tag] ?? 0, getLongestRewardStreak(Array.isArray(dates) ? dates : []));
     return streaks;
   }, {});
 }
@@ -174,23 +178,21 @@ function isLocalDateKey(value?: string) {
 }
 
 function getBestTaskStreak(state: RewardDailyState, afterDate?: string) {
-  const tasks = Array.isArray(state.tasks) ? state.tasks : [];
-  return Math.max(0, ...tasks.map((task) => {
-    const completionDates = task.id ? state.completionDatesByTask?.[task.id] ?? [] : [];
+  const completionDatesByTask =
+    state.completionDatesByTask && typeof state.completionDatesByTask === "object" ? state.completionDatesByTask : {};
+  return Math.max(0, ...Object.values(completionDatesByTask).map((dates) => {
+    const completionDates = Array.isArray(dates) ? dates : [];
     return getLongestRewardStreak(afterDate ? completionDates.filter((date) => date > afterDate) : completionDates);
   }));
 }
 
 function getMaxSimultaneousTaskStreakCount(state: RewardDailyState, requiredDays: number) {
-  const tasks = Array.isArray(state.tasks) ? state.tasks : [];
+  const completionDatesByTask =
+    state.completionDatesByTask && typeof state.completionDatesByTask === "object" ? state.completionDatesByTask : {};
   const qualifyingTasksByDate = new Map<string, number>();
 
-  for (const task of tasks) {
-    if (!task.id) {
-      continue;
-    }
-
-    const sortedDates = Array.from(new Set(state.completionDatesByTask?.[task.id] ?? [])).sort();
+  for (const dates of Object.values(completionDatesByTask)) {
+    const sortedDates = Array.from(new Set(Array.isArray(dates) ? dates : [])).sort();
     let consecutiveDays = 0;
     let previousDate: string | null = null;
 

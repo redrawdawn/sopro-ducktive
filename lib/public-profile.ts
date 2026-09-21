@@ -48,6 +48,7 @@ type PublicProfileRow = {
   achievements_count: number | null;
   total_tasks_completed?: number | null;
   highest_streak?: number | null;
+  streak_last_completed_on?: string | null;
   medals: unknown;
 };
 
@@ -120,6 +121,40 @@ function getCurrentStreak(completionDates: string[] = [], date = new Date()) {
   return streak;
 }
 
+function getCurrentStreakSnapshot(state: StoredDailyState, date = new Date()) {
+  const tasks = Array.isArray(state.tasks) ? state.tasks : [];
+  const completionDatesByTask =
+    state.completionDatesByTask && typeof state.completionDatesByTask === "object" ? state.completionDatesByTask : {};
+  const today = localDateKey(date);
+  const yesterday = addDays(today, -1);
+
+  return tasks.reduce(
+    (best, task) => {
+      const dates = task.id && Array.isArray(completionDatesByTask[task.id])
+        ? completionDatesByTask[task.id]
+        : [];
+      const streak = getCurrentStreak(dates, date);
+      const lastCompletedOn = dates.includes(today) ? today : dates.includes(yesterday) ? yesterday : null;
+
+      if (streak > best.streak || (streak === best.streak && lastCompletedOn && lastCompletedOn > (best.lastCompletedOn ?? ""))) {
+        return { streak, lastCompletedOn };
+      }
+
+      return best;
+    },
+    { streak: 0, lastCompletedOn: null as string | null }
+  );
+}
+
+function isStoredStreakCurrent(lastCompletedOn: string | null | undefined, date = new Date()) {
+  if (!lastCompletedOn) {
+    return false;
+  }
+
+  const today = localDateKey(date);
+  return lastCompletedOn === today || lastCompletedOn === addDays(today, -1);
+}
+
 export function getClaimedRewardCount() {
   if (typeof window === "undefined") {
     return 0;
@@ -128,7 +163,7 @@ export function getClaimedRewardCount() {
   try {
     const saved = JSON.parse(window.localStorage.getItem(CLAIMED_REWARDS_KEY) ?? "[]") as unknown;
     return Array.isArray(saved)
-      ? saved.filter((id) => typeof id === "string" && !isRetiredRewardId(id) && !isRecurringReward(id)).length
+      ? new Set(saved.filter((id) => typeof id === "string" && !isRetiredRewardId(id) && !isRecurringReward(id))).size
       : 0;
   } catch {
     return 0;
@@ -158,14 +193,7 @@ export function getTotalTasksCompleted(state: StoredDailyState) {
 }
 
 export function getCurrentHighestStreak(state: StoredDailyState, date = new Date()) {
-  const tasks = Array.isArray(state.tasks) ? state.tasks : [];
-  const completionDatesByTask =
-    state.completionDatesByTask && typeof state.completionDatesByTask === "object" ? state.completionDatesByTask : {};
-
-  return tasks.reduce(
-    (best, task) => Math.max(best, task.id ? getCurrentStreak(completionDatesByTask[task.id] ?? [], date) : 0),
-    0
-  );
+  return getCurrentStreakSnapshot(state, date).streak;
 }
 
 function normalizeMedals(value: unknown): PublicProfileMedal[] {
@@ -197,7 +225,7 @@ export function buildPublicProfileSnapshot() {
   const state = parseDailyState();
   const level = getLevelSnapshot(Math.max(0, Number(state.totalXp) || 0)).level;
   const medals = buildMedals(state);
-  const currentHighestStreak = getCurrentHighestStreak(state);
+  const currentStreak = getCurrentStreakSnapshot(state);
   const totalTasksCompleted = getTotalTasksCompleted(state);
 
   return {
@@ -209,7 +237,8 @@ export function buildPublicProfileSnapshot() {
     level,
     total_xp: Math.max(0, Number(state.totalXp) || 0),
     achievements_count: getClaimedRewardCount(),
-    highest_streak: currentHighestStreak,
+    highest_streak: currentStreak.streak,
+    streak_last_completed_on: currentStreak.lastCompletedOn,
     medals
   };
 }
@@ -248,6 +277,19 @@ export async function syncCurrentPublicProfile(
   );
 
   if (error) {
+    if (error.message.toLowerCase().includes("streak_last_completed_on")) {
+      const legacyProfileRow = { ...profileRow };
+      delete (legacyProfileRow as Partial<typeof profileRow>).streak_last_completed_on;
+      const { error: legacyError } = await supabase.from("app_public_profiles").upsert(
+        legacyProfileRow,
+        { onConflict: "user_id" }
+      );
+      if (!legacyError) {
+        return;
+      }
+      console.warn("Motive public profile sync failed", legacyError.message);
+      return;
+    }
     console.warn("Motive public profile sync failed", error.message);
   }
 }
@@ -267,9 +309,10 @@ export async function loadOtherPublicProfiles(limit = 20) {
 
   let includeTotalTasks = true;
   let includeHighestStreak = true;
+  let includeStreakLastCompletedOn = true;
   let profiles: PublicProfileRow[] | null = null;
 
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
     const fields = [
       "user_id",
       "display_name",
@@ -278,6 +321,7 @@ export async function loadOtherPublicProfiles(limit = 20) {
       "achievements_count",
       ...(includeTotalTasks ? ["total_tasks_completed"] : []),
       ...(includeHighestStreak ? ["highest_streak"] : []),
+      ...(includeStreakLastCompletedOn ? ["streak_last_completed_on"] : []),
       "medals"
     ].join(", ");
     const result = await supabase
@@ -303,6 +347,10 @@ export async function loadOtherPublicProfiles(limit = 20) {
       includeHighestStreak = false;
       retry = true;
     }
+    if (includeStreakLastCompletedOn && message.includes("streak_last_completed_on")) {
+      includeStreakLastCompletedOn = false;
+      retry = true;
+    }
     if (!retry) {
       console.warn("Motive public profiles unavailable", result.error.message);
       return [];
@@ -319,7 +367,10 @@ export async function loadOtherPublicProfiles(limit = 20) {
       rewards: Math.max(0, Number(profile.achievements_count) || 0),
       totalTasksCompleted: embeddedTotal ?? (includeTotalTasks ? Math.max(0, Number(profile.total_tasks_completed) || 0) : 0),
       avatarConfig: normalizeAvatarConfig(profile.avatar_config),
-      currentHighestStreak: includeHighestStreak ? Math.max(0, Number(profile.highest_streak) || 0) : 0,
+      currentHighestStreak: includeHighestStreak
+        && (!includeStreakLastCompletedOn || isStoredStreakCurrent(profile.streak_last_completed_on))
+        ? Math.max(0, Number(profile.highest_streak) || 0)
+        : 0,
       medals: normalizeMedals(profile.medals)
     };
   });
