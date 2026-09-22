@@ -10,6 +10,7 @@ import {
   getTotalTasksCompleted,
   isPublicProfileEnabled,
   loadOtherPublicProfiles,
+  savePublicDisplayName,
   setPublicProfileEnabled,
   syncCurrentPublicProfile,
   type PublicProfile,
@@ -79,6 +80,9 @@ export function ProfilePage() {
   const [profilesLoaded, setProfilesLoaded] = useState(false);
   const [profilePublic, setProfilePublic] = useState(false);
   const [displayName, setDisplayName] = useState("");
+  const [publicNamePromptOpen, setPublicNamePromptOpen] = useState(false);
+  const [publicNamePromptValue, setPublicNamePromptValue] = useState("");
+  const [publicNamePromptError, setPublicNamePromptError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -171,9 +175,27 @@ export function ProfilePage() {
     setProfilesLoaded(true);
   }
 
-  async function publishProfile() {
+  function openPublicNamePrompt() {
+    setPublicNamePromptValue(displayName);
+    setPublicNamePromptError(null);
+    setPublicNamePromptOpen(true);
+  }
+
+  async function publishProfile(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const firstName = publicNamePromptValue.trim();
+
+    if (!firstName) {
+      setPublicNamePromptError("Enter your first name to make your account public.");
+      return;
+    }
+
+    savePublicDisplayName(firstName);
+    setDisplayName(firstName);
     setPublicProfileEnabled(true);
     setProfilePublic(true);
+    setPublicNamePromptOpen(false);
+    setPublicNamePromptError(null);
     await syncCurrentPublicProfile();
     await refreshOtherProfiles();
   }
@@ -216,7 +238,7 @@ export function ProfilePage() {
               <div className="text-xs font-black uppercase tracking-[0.18em] text-muted-foreground">Profile</div>
               <div className="mt-1 truncate text-lg font-black">{displayName || "Name not set"}</div>
             </div>
-            <Button type="button" onClick={publishProfile} variant="outline">
+            <Button type="button" onClick={openPublicNamePrompt} variant="outline">
               <Globe2 className="mr-2 h-4 w-4" />
               Make public
             </Button>
@@ -324,6 +346,50 @@ export function ProfilePage() {
           );
         })}
       </section>
+
+      {publicNamePromptOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-5 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setPublicNamePromptOpen(false)}
+        >
+          <form
+            onSubmit={publishProfile}
+            className="neon-card w-full max-w-sm rounded-3xl p-5 animate-in fade-in zoom-in-95 duration-200"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-1 text-xl font-black">Make your account public</div>
+            <p className="mb-4 text-sm font-semibold text-muted-foreground">
+              Enter your first name so people know who they found.
+            </p>
+            <label className="text-xs font-black uppercase tracking-[0.16em] text-muted-foreground" htmlFor="profile-public-first-name">
+              First name
+            </label>
+            <Input
+              id="profile-public-first-name"
+              value={publicNamePromptValue}
+              onChange={(event) => {
+                setPublicNamePromptValue(event.target.value);
+                setPublicNamePromptError(null);
+              }}
+              autoFocus
+              required
+              maxLength={24}
+              autoComplete="given-name"
+              placeholder="First name"
+              className="mt-2 border-0 bg-background"
+            />
+            {publicNamePromptError ? (
+              <p className="mt-2 text-xs font-bold text-destructive">{publicNamePromptError}</p>
+            ) : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setPublicNamePromptOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit">Make public</Button>
+            </div>
+          </form>
+        </div>
+      ) : null}
     </div>
   );
 }
